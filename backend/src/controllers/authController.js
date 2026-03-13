@@ -210,7 +210,11 @@ export async function forgotPassword(req, res, next) {
         message: "Password reset request accepted. Email delivery is temporarily unavailable.",
       };
 
-      if (process.env.NODE_ENV !== "production") {
+      const allowResetLinkFallback =
+        process.env.NODE_ENV !== "production" ||
+        String(process.env.ALLOW_RESET_LINK_FALLBACK || "").toLowerCase() === "true";
+
+      if (allowResetLinkFallback) {
         response.devResetUrl = resetUrl;
       }
 
