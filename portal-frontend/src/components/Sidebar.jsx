@@ -38,15 +38,15 @@ export default function Sidebar() {
       }`}
     >
       {/* Logo */}
-      <div className="border-b border-white/20 bg-white px-3 py-4">
-        <div className={`flex flex-col items-center rounded-xl bg-white text-primary ${open ? "py-3" : "py-2"}`}>
+      <div className="border-b border-white/20 bg-primary px-3 py-3">
+        <div className={`flex items-center rounded-xl bg-primary/90 px-2 py-2 ${open ? "gap-3" : "justify-center"}`}>
           <img
-            src={`${process.env.PUBLIC_URL}/ndd logo with bg.jpeg`}
+            src={`${process.env.PUBLIC_URL}/favicon-ndd.png`}
             alt="NDD Logo"
-            className={`${open ? "h-16 w-32" : "h-12 w-12"} rounded-xl object-contain shadow-md`}
+            className="h-9 w-9 flex-shrink-0 rounded-lg object-contain"
           />
           {open && (
-            <p className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.2em] text-slate-700">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/90">
               Portal Access
             </p>
           )}
@@ -91,7 +91,7 @@ export default function Sidebar() {
                     to="/ticket-checker"
                     className={({ isActive }) => `px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-secondary/80 shadow-sm' : 'hover:bg-secondary/60'}`}
                   >
-                    Ticket Maker
+                    Ticket Checker
                   </NavLink>
                 )}
                 {canViewSupervisorPage && (
@@ -122,6 +122,14 @@ export default function Sidebar() {
             )}
           </div>
         )}
+
+        <button
+          onClick={handleLogout}
+          className={`${linkBaseClass} ${linkIdleClass} w-full`}
+        >
+          <ArrowRightOnRectangleIcon className="h-6 w-6" />
+          {open && <span>Logout</span>}
+        </button>
       </div>
 
       {/* User Profile */}
@@ -131,20 +139,10 @@ export default function Sidebar() {
           alt="User avatar"
           className="h-10 w-10 rounded-full object-cover flex-shrink-0"
         />
-
         {open && (
-          <div className="flex items-center justify-between w-full">
-            <div>
-              <p className="text-sm font-semibold">{displayName}</p>
-              <p className="text-xs text-gray-300">{displayRole}</p>
-            </div>
-            <button
-              aria-label="Exit"
-              onClick={handleLogout}
-              className="text-red-300 hover:text-red-200 transition-colors duration-300"
-            >
-              <ArrowRightOnRectangleIcon className="h-5 w-5" />
-            </button>
+          <div>
+            <p className="text-sm font-semibold">{displayName}</p>
+            <p className="text-xs text-gray-300">{displayRole}</p>
           </div>
         )}
       </div>

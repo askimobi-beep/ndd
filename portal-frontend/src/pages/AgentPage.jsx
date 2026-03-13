@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarDaysIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
@@ -198,13 +197,12 @@ export default function AgentPage() {
 
       <div className="flex-1 px-6 py-8 lg:px-8">
         <div className="w-full space-y-8">
-          <div className="rounded-[28px] bg-gradient-to-r from-primary via-secondary to-[#1f3c97] p-8 text-white shadow-[0_24px_60px_rgba(0,87,231,0.22)]">
+          <div className="rounded-[28px] bg-gradient-to-r from-primary via-secondary to-[#1f3c97] p-5 text-white shadow-[0_16px_40px_rgba(0,87,231,0.20)]">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-100">Agent Panel</p>
-                <h2 className="mt-3 text-3xl font-semibold lg:text-4xl">Agent Management Dashboard</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-blue-100">
-                  Manage agent records, review availability, and organize profile searches inside a refined workspace.
+                <h2 className="text-2xl font-semibold lg:text-3xl">Agent Management</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100">
+                  Manage agent records and account access.
                 </p>
               </div>
 
@@ -221,45 +219,27 @@ export default function AgentPage() {
           </div>
 
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-8">
-            <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Filters</p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">Refine agent records</h3>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last Week</button>
-                  <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last Month</button>
-                  <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last 2 Months</button>
-                  <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last 6 Months</button>
-                </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Filters</p>
+                <h3 className="mt-1 text-xl font-semibold text-slate-900">Refine agent records</h3>
               </div>
-
-              <div className="grid w-full gap-4 xl:w-auto xl:grid-cols-[220px_150px_240px]">
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10">
-                  <CalendarDaysIcon className="h-5 w-5 text-slate-400" />
-                  <input type="text" placeholder="Select Date Range" className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400" />
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10">
-                  <select className="w-full bg-transparent text-sm text-slate-700 outline-none">
-                    <option>Name</option>
-                    <option>Email</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10">
-                  <MagnifyingGlassIcon className="h-5 w-5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search agents"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                  />
-                </div>
+              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10 sm:min-w-[240px]">
+                <MagnifyingGlassIcon className="h-5 w-5 flex-shrink-0 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search agents…"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                />
               </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last Week</button>
+              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last Month</button>
+              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last 2 Months</button>
+              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last 6 Months</button>
             </div>
           </div>
 
@@ -393,8 +373,7 @@ export default function AgentPage() {
 
       <RegisterUserModal
         isOpen={isModalOpen}
-        panelLabel="Agent Panel"
-        title="Register New AGENT"
+        title="Register New Agent"
         submitLabel="Save Agent"
         formData={formData}
         onClose={() => setIsModalOpen(false)}

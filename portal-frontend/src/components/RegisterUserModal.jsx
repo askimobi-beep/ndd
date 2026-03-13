@@ -25,7 +25,6 @@ function guidelineIcon(type) {
 
 export default function RegisterUserModal({
   isOpen,
-  panelLabel,
   title,
   submitLabel,
   formData,
@@ -44,8 +43,7 @@ export default function RegisterUserModal({
       <div className="w-full max-w-6xl rounded-2xl border border-slate-200 bg-slate-100 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4 sm:px-6">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">{panelLabel}</p>
-            <h3 className="mt-1 text-2xl font-bold text-primary">{title}</h3>
+            <h3 className="text-2xl font-bold text-primary">{title}</h3>
           </div>
           <button
             aria-label="Close popup"
@@ -60,18 +58,18 @@ export default function RegisterUserModal({
         <div className="space-y-4 p-4 sm:p-6">
           <section className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
             <h4 className="text-sm font-semibold uppercase tracking-[0.08em] text-blue-700">Registration Rules</h4>
-            <ul className="mt-3 flex flex-wrap gap-3">
+            <ul className="mt-3 grid gap-3 md:grid-cols-3">
               <li className="inline-flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-sm text-blue-900">
                 {guidelineIcon("email")}
-                <span>Email cannot be changed after registration</span>
+                <span>Email stays fixed after signup</span>
               </li>
               <li className="inline-flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-sm text-blue-900">
                 {guidelineIcon("lock")}
-                <span>Login credentials are sent automatically via email</span>
+                <span>Login details go by email</span>
               </li>
               <li className="inline-flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-sm text-blue-900">
                 {guidelineIcon("shield")}
-                <span>Use Generate button for secure passwords</span>
+                <span>Use Generate for a secure password</span>
               </li>
             </ul>
           </section>

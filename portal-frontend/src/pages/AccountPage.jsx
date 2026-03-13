@@ -4,9 +4,7 @@ import { Link } from "react-router-dom";
 import { apiRequest } from "../utils/api";
 import { getAuthUser, updateAuthUser } from "../utils/auth";
 import {
-  CameraIcon,
   EnvelopeIcon,
-  IdentificationIcon,
   PencilSquareIcon,
   ShieldCheckIcon,
   UserIcon,
@@ -47,18 +45,6 @@ export default function AccountPage() {
     return user.fullName || `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User";
   }, [user]);
 
-  const joinedAt = useMemo(() => {
-    if (!user?.createdAt) {
-      return "-";
-    }
-
-    return new Date(user.createdAt).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }, [user]);
-
   const openEditModal = () => {
     setFormData({
       firstName: user?.firstName || "",
@@ -92,8 +78,10 @@ export default function AccountPage() {
 
       setNotification({ text: data.message || "Profile updated successfully", type: "success" });
       setIsEditOpen(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       setNotification({ text: error.message || "Unable to update profile", type: "error" });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setIsSaving(false);
     }
@@ -105,15 +93,18 @@ export default function AccountPage() {
 
       <div className="flex-1 px-6 py-8 lg:px-8">
         <div className="w-full space-y-8">
-          <div className="rounded-[28px] bg-gradient-to-r from-primary via-secondary to-[#1e3a8a] p-8 text-white shadow-[0_24px_60px_rgba(0,87,231,0.22)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          {notification.text && (
+            <div className={`rounded-2xl px-5 py-4 text-sm font-medium ${notification.type === "success" ? "border border-emerald-200 bg-emerald-50 text-emerald-700" : "border border-red-200 bg-red-50 text-red-700"}`}>
+              {notification.text}
+            </div>
+          )}
+
+          <div className="rounded-[28px] bg-gradient-to-r from-primary via-secondary to-[#1e3a8a] p-5 text-white shadow-[0_16px_40px_rgba(0,87,231,0.20)]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-100">
-                  Profile Dashboard
-                </p>
-                <h2 className="mt-3 text-3xl font-semibold lg:text-4xl">Account Overview</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-blue-100">
-                  This is your primary dashboard page. Review profile details and account access from one place.
+                <h2 className="text-2xl font-semibold lg:text-3xl">Account Overview</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100">
+                  Review profile details and account access.
                 </p>
               </div>
 
@@ -130,31 +121,17 @@ export default function AccountPage() {
             </div>
           </div>
 
-          {notification.text && (
-            <div className={`rounded-2xl px-5 py-4 text-sm font-medium ${notification.type === "success" ? "border border-emerald-200 bg-emerald-50 text-emerald-700" : "border border-red-200 bg-red-50 text-red-700"}`}>
-              {notification.text}
-            </div>
-          )}
-
           <div className="grid gap-8 xl:grid-cols-[340px_1fr]">
             <div className="rounded-[28px] border border-white/60 bg-white p-8 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
               <div className="flex flex-col items-center text-center">
-                <div className="relative">
-                  <img
-                    src={`${process.env.PUBLIC_URL}/avatar.jpg`}
-                    alt="profile"
-                    className="h-28 w-28 rounded-3xl object-cover shadow-lg ring-4 ring-primary/10"
-                  />
-                  <button className="absolute -bottom-2 -right-2 rounded-full bg-primary p-2.5 text-white shadow-lg transition hover:bg-secondary">
-                    <CameraIcon className="h-5 w-5" />
-                  </button>
-                </div>
+                <img
+                  src={`${process.env.PUBLIC_URL}/avatar.jpg`}
+                  alt="profile"
+                  className="h-28 w-28 rounded-3xl object-cover shadow-lg ring-4 ring-primary/10"
+                />
 
                 <h3 className="mt-6 text-2xl font-semibold text-slate-900">{fullName}</h3>
                 <p className="mt-1 text-sm text-slate-500">{user?.email || "-"}</p>
-                <span className="mt-4 rounded-full bg-primary/10 px-4 py-2 text-sm font-semibold text-primary">
-                  {user?.role || "USER"}
-                </span>
               </div>
 
               <div className="mt-8 space-y-4">
@@ -164,15 +141,6 @@ export default function AccountPage() {
                     <div>
                       <p className="text-sm font-semibold text-slate-800">Access Control</p>
                       <p className="text-xs text-slate-500">Verified internal profile</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="flex items-center gap-3">
-                    <IdentificationIcon className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Employee ID</p>
-                      <p className="text-xs text-slate-500">{user?._id || "-"}</p>
                     </div>
                   </div>
                 </div>
@@ -191,8 +159,7 @@ export default function AccountPage() {
             <div className="rounded-[28px] border border-white/60 bg-white p-8 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-10">
               <div className="flex flex-col gap-3 border-b border-slate-200 pb-6 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Personal Information</p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">Manage account profile</h3>
+                  <h3 className="text-2xl font-semibold text-slate-900">Manage account profile</h3>
                 </div>
                 <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
                   Last updated: Today
@@ -244,36 +211,6 @@ export default function AccountPage() {
                       className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
                     />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Role</label>
-                  <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10">
-                    <IdentificationIcon className="h-5 w-5 text-slate-400" />
-                    <input
-                      type="text"
-                      value={user?.role || ""}
-                      readOnly
-                      autoComplete="off"
-                      data-lpignore="true"
-                      data-form-type="other"
-                      className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-8 grid gap-4 rounded-[24px] bg-slate-50 p-5 sm:grid-cols-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Joined</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-800">{joinedAt}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Office</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-800">{user?.office || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Security</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-800">Strong Password</p>
                 </div>
               </div>
 

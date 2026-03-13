@@ -50,13 +50,10 @@ export default function ForgotPasswordPage() {
         <img
           src={`${process.env.PUBLIC_URL}/ndd logo with bg.jpeg`}
           alt="NDD Logo"
-          className="h-20 w-full rounded-2xl border-2 border-slate-200 bg-white p-1.5 object-contain shadow-md"
+          className="h-20 w-full rounded-2xl bg-white p-1.5 object-contain"
         />
 
-        <p className="mt-6 text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-          Forgot Password
-        </p>
-        <h2 className="mt-3 text-3xl font-semibold text-slate-900">Reset your password</h2>
+        <h2 className="mt-6 text-3xl font-semibold text-slate-900">Reset your password</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">
           Enter your account email and we will send a reset link.
         </p>

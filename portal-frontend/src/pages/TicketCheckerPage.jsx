@@ -4,7 +4,6 @@ import RegisterUserModal from "../components/RegisterUserModal";
 import { apiRequest } from "../utils/api";
 import { getAuthUser, hasAnyRole } from "../utils/auth";
 import {
-  CalendarDaysIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
@@ -79,7 +78,7 @@ export default function TicketCheckerPage() {
         const data = await apiRequest("/api/users?role=TICKET%20CHECKER");
         setRecords(data.users || []);
       } catch (error) {
-        setNotification({ text: error.message || "Unable to load ticket makers", type: "error" });
+        setNotification({ text: error.message || "Unable to load ticket checkers", type: "error" });
       } finally {
         setIsLoading(false);
       }
@@ -165,10 +164,10 @@ export default function TicketCheckerPage() {
         setRecords((prev) => prev.map((record) => (record._id === data.user._id ? data.user : record)));
       }
 
-      setNotification({ text: data.message || "Ticket maker updated successfully", type: "success" });
+      setNotification({ text: data.message || "Ticket checker updated successfully", type: "success" });
       setIsEditOpen(false);
     } catch (error) {
-      setNotification({ text: error.message || "Unable to update ticket maker", type: "error" });
+      setNotification({ text: error.message || "Unable to update ticket checker", type: "error" });
     } finally {
       setIsEditSubmitting(false);
     }
@@ -186,11 +185,11 @@ export default function TicketCheckerPage() {
       }
 
       setNotification({
-        text: data.user?.isActive ? "Ticket maker activated successfully" : "Ticket maker blocked successfully",
+        text: data.user?.isActive ? "Ticket checker activated successfully" : "Ticket checker blocked successfully",
         type: "success",
       });
     } catch (error) {
-      setNotification({ text: error.message || "Unable to update ticket maker status", type: "error" });
+      setNotification({ text: error.message || "Unable to update ticket checker status", type: "error" });
     }
   };
 
@@ -200,15 +199,12 @@ export default function TicketCheckerPage() {
 
       <div className="flex-1 px-6 py-8 lg:px-8">
         <div className="w-full space-y-8">
-          <div className="rounded-[28px] bg-gradient-to-r from-primary via-secondary to-[#1f3c97] p-8 text-white shadow-[0_24px_60px_rgba(0,87,231,0.22)]">
+          <div className="rounded-[28px] bg-gradient-to-r from-primary via-secondary to-[#1f3c97] p-5 text-white shadow-[0_16px_40px_rgba(0,87,231,0.20)]">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-100">
-                  Ticket Checker
-                </p>
-                <h2 className="mt-3 text-3xl font-semibold lg:text-4xl">Ticket Management Dashboard</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-blue-100">
-                  Review ticket activity, refine filters, and manage new ticket intake from a clean, modern workspace.
+                <h2 className="text-2xl font-semibold lg:text-3xl">Ticket Management</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100">
+                  Manage ticket checker records from one workspace.
                 </p>
               </div>
 
@@ -225,69 +221,39 @@ export default function TicketCheckerPage() {
           </div>
 
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-8">
-            <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Filters</p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">Refine ticket records</h3>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">
-                    Last Week
-                  </button>
-                  <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">
-                    Last Month
-                  </button>
-                  <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">
-                    Last 2 Months
-                  </button>
-                  <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">
-                    Last 6 Months
-                  </button>
-                </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Filters</p>
+                <h3 className="mt-1 text-xl font-semibold text-slate-900">Refine ticket records</h3>
               </div>
-
-              <div className="grid w-full gap-4 xl:w-auto xl:grid-cols-[220px_150px_240px]">
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10">
-                  <CalendarDaysIcon className="h-5 w-5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Select Date Range"
-                    className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                  />
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10">
-                  <select className="w-full bg-transparent text-sm text-slate-700 outline-none">
-                    <option>Name</option>
-                    <option>Email</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10">
-                  <MagnifyingGlassIcon className="h-5 w-5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search tickets"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                  />
-                </div>
+              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10 sm:min-w-[240px]">
+                <MagnifyingGlassIcon className="h-5 w-5 flex-shrink-0 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search ticket checkers…"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                />
               </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last Week</button>
+              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last Month</button>
+              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last 2 Months</button>
+              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last 6 Months</button>
             </div>
           </div>
 
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-8">
             <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-semibold text-slate-900">Ticket Maker Table</h3>
+              <h3 className="text-2xl font-semibold text-slate-900">Ticket Checker Table</h3>
               {isLoading && <p className="text-sm text-slate-500">Loading...</p>}
             </div>
 
             {!canManageTicketCheckers && (
               <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                Ticket Maker users have read-only page access. Account creation and list management are admin only.
+                Ticket Checker users have read-only page access. Account creation and list management are admin only.
               </div>
             )}
 
@@ -345,8 +311,8 @@ export default function TicketCheckerPage() {
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <XCircleIcon className="h-8 w-8" />
                 </div>
-                <h4 className="mt-4 text-xl font-semibold text-slate-900">No Ticket Maker Records Found</h4>
-                <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Add a ticket maker from the top action button and it will appear here instantly.</p>
+                <h4 className="mt-4 text-xl font-semibold text-slate-900">No Ticket Checker Records Found</h4>
+                <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Add a ticket checker from the top action button and it will appear here instantly.</p>
               </div>
             )}
 
@@ -363,7 +329,7 @@ export default function TicketCheckerPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 px-4">
           <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
             <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-semibold text-slate-900">Edit Ticket Maker</h3>
+              <h3 className="text-2xl font-semibold text-slate-900">Edit Ticket Checker</h3>
               <button
                 onClick={() => setIsEditOpen(false)}
                 className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary"
@@ -409,8 +375,7 @@ export default function TicketCheckerPage() {
 
       <RegisterUserModal
         isOpen={isModalOpen}
-        panelLabel="Ticket Checker"
-        title="Register New TICKET CHECKER"
+        title="Register New Ticket Checker"
         submitLabel="Save Ticket Checker"
         formData={formData}
         onClose={() => setIsModalOpen(false)}
