@@ -14,6 +14,7 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [message, setMessage] = useState("");
+  const [resetLink, setResetLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
@@ -21,6 +22,7 @@ export default function ForgotPasswordPage() {
     event.preventDefault();
     setSubmitted(false);
     setMessage("");
+    setResetLink("");
 
     try {
       setIsSubmitting(true);
@@ -30,9 +32,11 @@ export default function ForgotPasswordPage() {
       });
       setSubmitted(true);
       setMessage(data.message || "Reset link sent successfully.");
+      setResetLink(data.devResetUrl || "");
     } catch (error) {
       setSubmitted(false);
       setMessage(error.message || "Unable to send reset link.");
+      setResetLink("");
     } finally {
       setIsSubmitting(false);
     }
@@ -80,6 +84,11 @@ export default function ForgotPasswordPage() {
                 <ShieldCheckIcon className="h-5 w-5" />
                 {message}
               </p>
+              {resetLink && (
+                <p className="mt-3 rounded-xl border border-emerald-200 bg-white/70 px-3 py-2 text-xs break-all">
+                  Reset link: <a href={resetLink} className="font-semibold text-primary underline">{resetLink}</a>
+                </p>
+              )}
             </div>
           )}
 
