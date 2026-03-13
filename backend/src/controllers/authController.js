@@ -193,15 +193,29 @@ export async function forgotPassword(req, res, next) {
     await user.save({ validateBeforeSave: false });
 
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "Password Reset Request",
+        text: `You requested a password reset. Click the link to reset your password: ${resetUrl}. This link expires in 15 minutes.`,
+        html: `<p>You requested a password reset.</p><p><a href="${resetUrl}">Reset your password</a></p><p>This link expires in 15 minutes.</p>`,
+      });
 
-    await sendEmail({
-      to: user.email,
-      subject: "Password Reset Request",
-      text: `You requested a password reset. Click the link to reset your password: ${resetUrl}. This link expires in 15 minutes.`,
-      html: `<p>You requested a password reset.</p><p><a href="${resetUrl}">Reset your password</a></p><p>This link expires in 15 minutes.</p>`,
-    });
+      return res.json({ message: "Password reset email sent" });
+    } catch (mailError) {
+      // Keep forgot-password endpoint resilient even when SMTP provider is unavailable.
+      console.error("Forgot password email delivery failed:", mailError?.message || mailError);
 
-    return res.json({ message: "Password reset email sent" });
+      const response = {
+        message: "Password reset request accepted. Email delivery is temporarily unavailable.",
+      };
+
+      if (process.env.NODE_ENV !== "production") {
+        response.devResetUrl = resetUrl;
+      }
+
+      return res.status(202).json(response);
+    }
   } catch (error) {
     return next(error);
   }
