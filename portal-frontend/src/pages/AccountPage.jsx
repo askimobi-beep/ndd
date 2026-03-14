@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import TopNavbar from "../components/TopNavbar";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../utils/api";
-import { getAuthUser, updateAuthUser } from "../utils/auth";
+import { formatRoleLabel, getAuthUser, updateAuthUser } from "../utils/auth";
 import {
   EnvelopeIcon,
   PencilSquareIcon,
@@ -132,6 +132,9 @@ export default function AccountPage() {
 
                 <h3 className="mt-6 text-2xl font-semibold text-slate-900">{fullName}</h3>
                 <p className="mt-1 text-sm text-slate-500">{user?.email || "-"}</p>
+                <p className="mt-2 inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-semibold text-primary">
+                  {formatRoleLabel(user?.role)}
+                </p>
               </div>
 
               <div className="mt-8 space-y-4">
@@ -204,6 +207,21 @@ export default function AccountPage() {
                     <input
                       type="text"
                       value={user?.email || ""}
+                      readOnly
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-form-type="other"
+                      className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Role</label>
+                  <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <ShieldCheckIcon className="h-5 w-5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={formatRoleLabel(user?.role)}
                       readOnly
                       autoComplete="off"
                       data-lpignore="true"

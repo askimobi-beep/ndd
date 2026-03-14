@@ -25,9 +25,9 @@ export default function TopNavbar() {
         <div className="flex flex-col gap-3 px-5 py-3 lg:flex-row lg:items-stretch lg:justify-between lg:px-6">
           <div className="flex min-h-[64px] items-center justify-center rounded-xl bg-slate-50 px-5 py-2 lg:min-w-[240px]">
             <img
-              src={`${process.env.PUBLIC_URL}/ndd logo with bg.jpeg`}
+              src={`${process.env.PUBLIC_URL}/ndd logo without bg.webp`}
               alt="NDD"
-              className="h-16 w-44 rounded-xl bg-white p-1 object-contain"
+              className="h-16 w-44 object-contain"
             />
           </div>
 

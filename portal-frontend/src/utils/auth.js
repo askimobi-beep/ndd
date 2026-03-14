@@ -45,6 +45,20 @@ export function getDefaultRouteForRole(role) {
   return "/dashboard";
 }
 
+export function formatRoleLabel(role) {
+  const normalizedRole = normalizeRole(role);
+
+  if (!normalizedRole) {
+    return "User";
+  }
+
+  return normalizedRole
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export function hasAnyRole(userRole, allowedRoles = []) {
   if (!allowedRoles.length) {
     return true;

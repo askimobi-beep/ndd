@@ -6,7 +6,7 @@ import {
   ChevronDownIcon,
   ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
-import { clearAuthSession, getAuthUser, hasAnyRole } from "../utils/auth";
+import { clearAuthSession, formatRoleLabel, getAuthUser, hasAnyRole } from "../utils/auth";
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
@@ -14,7 +14,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const user = getAuthUser();
   const displayName = user?.fullName || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Admin User";
-  const displayRole = user?.role || "USER";
+  const displayRole = formatRoleLabel(user?.role);
   const canManageUsers = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
   const canViewTicketMakerPage = hasAnyRole(user?.role, ["ADMIN", "TICKET CHECKER"]);
   const canViewSupervisorPage = hasAnyRole(user?.role, ["ADMIN"]);
