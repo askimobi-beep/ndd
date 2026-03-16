@@ -13,6 +13,10 @@ import { getAuthUser, hasAnyRole } from "../utils/auth";
 export default function AgentPage() {
   const user = getAuthUser();
   const canManageAgents = hasAnyRole(user?.role, ["SUPERVISOR"]);
+  const canViewAgents = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR"]);
+  const canApproveUsers = hasAnyRole(user?.role, ["ADMIN"]);
+  const canEditAgents = hasAnyRole(user?.role, ["SUPERVISOR"]);
+  const canBlockAgents = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR"]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notification, setNotification] = useState({ text: "", type: "success" });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,7 +35,7 @@ export default function AgentPage() {
   const [search, setSearch] = useState("");
   const [formData, setFormData] = useState({
     userRole: "AGENT",
-    office: "Lahore Office (LHR) Auto-assigned",
+    office: "Lahore Office (LHR)",
     firstName: "",
     lastName: "",
     email: "",
@@ -58,7 +62,7 @@ export default function AgentPage() {
   const resetForm = () => {
     setFormData({
       userRole: "AGENT",
-      office: "Lahore Office (LHR) Auto-assigned",
+      office: "Lahore Office (LHR)",
       firstName: "",
       lastName: "",
       email: "",
@@ -68,7 +72,7 @@ export default function AgentPage() {
   };
 
   const loadAgents = useCallback(async () => {
-    if (!canManageAgents) {
+    if (!canViewAgents) {
       return;
     }
 
@@ -81,7 +85,7 @@ export default function AgentPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [canManageAgents]);
+  }, [canViewAgents]);
 
   useEffect(() => {
     loadAgents();
@@ -191,6 +195,23 @@ export default function AgentPage() {
     }
   };
 
+  const approveUser = async (record) => {
+    try {
+      const data = await apiRequest(`/api/users/${record._id}/approval`, {
+        method: "PATCH",
+        body: JSON.stringify({ isApprovedByAdmin: true }),
+      });
+
+      if (data.user) {
+        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
+      }
+
+      setNotification({ text: data.message || "Agent approved successfully", type: "success" });
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to approve agent", type: "error" });
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-accent">
       <TopNavbar />
@@ -249,22 +270,18 @@ export default function AgentPage() {
               {isLoading && <p className="text-sm text-slate-500">Loading...</p>}
             </div>
 
-            {!canManageAgents && (
-              <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                This page is read-only unless you have supervisor access.
-              </div>
-            )}
-
-            {canManageAgents && filteredRecords.length > 0 && (
+            {canViewAgents && filteredRecords.length > 0 && (
               <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-slate-50 text-slate-700">
                     <tr>
                       <th className="px-4 py-3 font-semibold">Name</th>
                       <th className="px-4 py-3 font-semibold">Email</th>
+                      <th className="px-4 py-3 font-semibold">Supervisor</th>
                       <th className="px-4 py-3 font-semibold">Phone</th>
                       <th className="px-4 py-3 font-semibold">Office</th>
                       <th className="px-4 py-3 font-semibold">Status</th>
+                      <th className="px-4 py-3 font-semibold">Approval</th>
                       <th className="px-4 py-3 font-semibold">Actions</th>
                     </tr>
                   </thead>
@@ -273,6 +290,11 @@ export default function AgentPage() {
                       <tr key={record._id} className="border-t border-slate-100">
                         <td className="px-4 py-3 text-slate-700">{`${record.firstName || ""} ${record.lastName || ""}`.trim()}</td>
                         <td className="px-4 py-3 text-slate-700">{record.email || "-"}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {record.createdBy
+                            ? `${record.createdBy.firstName || ""} ${record.createdBy.lastName || ""}`.trim() || record.createdBy.email || "-"
+                            : "-"}
+                        </td>
                         <td className="px-4 py-3 text-slate-700">{record.phone || "-"}</td>
                         <td className="px-4 py-3 text-slate-700">{record.office || "-"}</td>
                         <td className="px-4 py-3">
@@ -281,20 +303,41 @@ export default function AgentPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
+                          {record.requiresAdminApproval ? (
+                            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${record.isApprovedByAdmin ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                              {record.isApprovedByAdmin ? "Approved" : "Pending"}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Not Required</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => openEditModal(record)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
-                            >
-                              <PencilSquareIcon className="h-4 w-4" />
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => toggleStatus(record)}
-                              className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                            >
-                              {record.isActive ? "Block" : "Activate"}
-                            </button>
+                            {canApproveUsers && record.requiresAdminApproval && !record.isApprovedByAdmin && (
+                              <button
+                                onClick={() => approveUser(record)}
+                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                              >
+                                Approve
+                              </button>
+                            )}
+                            {canEditAgents && (
+                              <button
+                                onClick={() => openEditModal(record)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                              >
+                                <PencilSquareIcon className="h-4 w-4" />
+                                Edit
+                              </button>
+                            )}
+                            {canBlockAgents && (
+                              <button
+                                onClick={() => toggleStatus(record)}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                              >
+                                {record.isActive ? "Block" : "Activate"}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -304,13 +347,13 @@ export default function AgentPage() {
               </div>
             )}
 
-            {canManageAgents && !isLoading && filteredRecords.length === 0 && (
+            {canViewAgents && !isLoading && filteredRecords.length === 0 && (
               <div className="mt-8 rounded-2xl border border-dashed border-primary/20 bg-slate-50 p-8 text-center">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <XCircleIcon className="h-8 w-8" />
                 </div>
                 <h4 className="mt-4 text-xl font-semibold text-slate-900">No Agent Records Found</h4>
-                <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Add an agent from the top action button and it will appear here instantly.</p>
+                <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">No agent records available right now.</p>
               </div>
             )}
 
@@ -376,6 +419,7 @@ export default function AgentPage() {
         title="Register New Agent"
         submitLabel="Save Agent"
         formData={formData}
+        showOfficeField
         onClose={() => setIsModalOpen(false)}
         onChange={handleChange}
         onGeneratePassword={generatePassword}

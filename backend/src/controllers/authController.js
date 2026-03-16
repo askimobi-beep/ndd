@@ -76,6 +76,11 @@ export async function login(req, res, next) {
       throw new Error("Invalid credentials");
     }
 
+    if (user.requiresAdminApproval && !user.isApprovedByAdmin) {
+      res.status(403);
+      throw new Error("Your account is pending approval. Kindly complete your payment for approval.");
+    }
+
     if (!user.isActive) {
       res.status(403);
       throw new Error("Your account is blocked. Contact admin.");
@@ -94,6 +99,8 @@ export async function login(req, res, next) {
         phone: user.phone,
         office: user.office,
         isActive: user.isActive,
+        requiresAdminApproval: user.requiresAdminApproval,
+        isApprovedByAdmin: user.isApprovedByAdmin,
       },
     });
   } catch (error) {

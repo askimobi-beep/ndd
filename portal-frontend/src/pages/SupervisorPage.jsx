@@ -31,7 +31,7 @@ export default function SupervisorPage() {
   const [search, setSearch] = useState("");
   const [formData, setFormData] = useState({
     userRole: "SUPERVISOR",
-    office: "Lahore Office (LHR) Auto-assigned",
+    office: "Lahore Office (LHR)",
     firstName: "",
     lastName: "",
     email: "",
@@ -58,7 +58,7 @@ export default function SupervisorPage() {
   const resetForm = () => {
     setFormData({
       userRole: "SUPERVISOR",
-      office: "Lahore Office (LHR) Auto-assigned",
+      office: "Lahore Office (LHR)",
       firstName: "",
       lastName: "",
       email: "",
@@ -376,6 +376,7 @@ export default function SupervisorPage() {
         title="Register New Supervisor"
         submitLabel="Save Supervisor"
         formData={formData}
+        showOfficeField
         onClose={() => setIsModalOpen(false)}
         onChange={handleChange}
         onGeneratePassword={generatePassword}

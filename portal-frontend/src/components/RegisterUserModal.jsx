@@ -28,6 +28,7 @@ export default function RegisterUserModal({
   title,
   submitLabel,
   formData,
+  showOfficeField = false,
   onClose,
   onChange,
   onGeneratePassword,
@@ -128,6 +129,20 @@ export default function RegisterUserModal({
                     className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                   />
                 </div>
+
+                {showOfficeField && (
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-semibold text-slate-700">Office</label>
+                    <input
+                      type="text"
+                      name="office"
+                      value={formData.office || ""}
+                      onChange={onChange}
+                      placeholder="Enter office name"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>

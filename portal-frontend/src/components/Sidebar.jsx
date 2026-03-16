@@ -18,8 +18,8 @@ export default function Sidebar() {
   const canManageUsers = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
   const canViewTicketMakerPage = hasAnyRole(user?.role, ["ADMIN", "TICKET CHECKER"]);
   const canViewSupervisorPage = hasAnyRole(user?.role, ["ADMIN"]);
-  const canViewAgentPage = hasAnyRole(user?.role, ["SUPERVISOR"]);
-  const canViewCustomerPage = hasAnyRole(user?.role, ["AGENT"]);
+  const canViewAgentPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR"]);
+  const canViewCustomerPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
   const linkBaseClass = "flex items-center gap-4 px-5 py-3 rounded-xl transition-all duration-300 cursor-pointer";
   const linkActiveClass = "bg-gradient-to-r from-secondary to-primary shadow-md";
   const linkIdleClass = "hover:bg-secondary/70";

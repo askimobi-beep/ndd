@@ -6,16 +6,24 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import TopNavbar from "../components/TopNavbar";
-import RegisterUserModal from "../components/RegisterUserModal";
 import { apiRequest } from "../utils/api";
 import { getAuthUser, hasAnyRole } from "../utils/auth";
 
 export default function CustomerPage() {
   const user = getAuthUser();
   const canManageCustomers = hasAnyRole(user?.role, ["AGENT"]);
+  const canViewCustomers = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
+  const canApproveUsers = hasAnyRole(user?.role, ["ADMIN"]);
+  const canEditCustomers = hasAnyRole(user?.role, ["AGENT"]);
+  const canBlockCustomers = hasAnyRole(user?.role, ["ADMIN", "AGENT"]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notification, setNotification] = useState({ text: "", type: "success" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customerPlan, setCustomerPlan] = useState("INDIVIDUAL");
+  const [fleetTargetCount, setFleetTargetCount] = useState(2);
+  const [fleetCustomers, setFleetCustomers] = useState([]);
+  const [licenseFileName, setLicenseFileName] = useState("");
+  const [editLicenseFileName, setEditLicenseFileName] = useState("");
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
   const [editingUserId, setEditingUserId] = useState("");
@@ -30,8 +38,7 @@ export default function CustomerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [formData, setFormData] = useState({
-    userRole: "CUSTOMER",
-    office: "Lahore Office (LHR) Auto-assigned",
+    office: "Lahore Office (LHR)",
     firstName: "",
     lastName: "",
     email: "",
@@ -55,20 +62,50 @@ export default function CustomerPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const canSaveCurrentCustomer = useMemo(() => {
+    return Boolean(
+      String(formData.firstName || "").trim() &&
+        String(formData.lastName || "").trim() &&
+        String(formData.email || "").trim() &&
+        String(formData.password || "").trim()
+    );
+  }, [formData]);
+
+  const fleetCanSubmit = useMemo(() => {
+    const currentDraftCount = canSaveCurrentCustomer ? 1 : 0;
+    return fleetCustomers.length + currentDraftCount >= fleetTargetCount;
+  }, [fleetCustomers.length, canSaveCurrentCustomer, fleetTargetCount]);
+
+  const fleetBubbles = useMemo(() => {
+    return Array.from({ length: fleetTargetCount }, (_, index) => {
+      const step = index + 1;
+      const hasCustomer = step <= fleetCustomers.length;
+      const isCurrent = step === fleetCustomers.length + 1;
+      return {
+        step,
+        hasCustomer,
+        isCurrent,
+      };
+    });
+  }, [fleetTargetCount, fleetCustomers.length]);
+
   const resetForm = () => {
     setFormData({
-      userRole: "CUSTOMER",
-      office: "Lahore Office (LHR) Auto-assigned",
+      office: "Lahore Office (LHR)",
       firstName: "",
       lastName: "",
       email: "",
       phone: "",
       password: "",
     });
+    setFleetCustomers([]);
+    setCustomerPlan("INDIVIDUAL");
+    setFleetTargetCount(2);
+    setLicenseFileName("");
   };
 
   const loadCustomers = useCallback(async () => {
-    if (!canManageCustomers) {
+    if (!canViewCustomers) {
       return;
     }
 
@@ -81,7 +118,7 @@ export default function CustomerPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [canManageCustomers]);
+  }, [canViewCustomers]);
 
   useEffect(() => {
     loadCustomers();
@@ -103,22 +140,96 @@ export default function CustomerPage() {
     });
   }, [records, search]);
 
+  const addFleetCustomer = () => {
+    if (!canSaveCurrentCustomer) {
+      setNotification({
+        text: "First name, last name, email, and password are required before saving next customer.",
+        type: "error",
+      });
+      return;
+    }
+
+    const normalizedEmail = String(formData.email || "").trim().toLowerCase();
+    const existingEmails = fleetCustomers.map((entry) => String(entry.email || "").trim().toLowerCase());
+
+    if (existingEmails.includes(normalizedEmail)) {
+      setNotification({ text: "Fleet customers must have unique email addresses.", type: "error" });
+      return;
+    }
+
+    setFleetCustomers((prev) => [
+      ...prev,
+      {
+        ...formData,
+        email: normalizedEmail,
+      },
+    ]);
+
+    setFormData((prev) => ({
+      ...prev,
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      password: "",
+    }));
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
     try {
       setIsSubmitting(true);
-      const data = await apiRequest("/api/users/customers", {
-        method: "POST",
-        body: JSON.stringify({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email,
-          password: formData.password,
-          phone: formData.phone,
-          office: formData.office,
-        }),
-      });
+      let data;
+
+      if (customerPlan === "INDIVIDUAL") {
+        data = await apiRequest("/api/users/customers", {
+          method: "POST",
+          body: JSON.stringify({
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            password: formData.password,
+            phone: formData.phone,
+            office: formData.office,
+            customerPlan: "INDIVIDUAL",
+          }),
+        });
+      } else {
+        const customersForSubmit = [...fleetCustomers];
+
+        if (canSaveCurrentCustomer) {
+          const currentEmail = String(formData.email || "").trim().toLowerCase();
+          const existingEmails = customersForSubmit.map((entry) => String(entry.email || "").trim().toLowerCase());
+
+          if (existingEmails.includes(currentEmail)) {
+            setNotification({ text: "Fleet customers must have unique email addresses.", type: "error" });
+            setIsSubmitting(false);
+            return;
+          }
+
+          customersForSubmit.push({
+            ...formData,
+            email: currentEmail,
+          });
+        }
+
+        if (customersForSubmit.length < fleetTargetCount) {
+          setNotification({ text: `Please add at least ${fleetTargetCount} customers for fleet plan.`, type: "error" });
+          setIsSubmitting(false);
+          return;
+        }
+
+        data = await apiRequest("/api/users/customers/fleet", {
+          method: "POST",
+          body: JSON.stringify({
+            customers: customersForSubmit.map((entry) => ({
+              ...entry,
+              customerPlan: "FLEET",
+            })),
+          }),
+        });
+      }
 
       setNotification({ text: data.message || "Customer created successfully", type: "success" });
       setIsModalOpen(false);
@@ -140,6 +251,7 @@ export default function CustomerPage() {
       phone: record.phone || "",
       office: record.office || "",
     });
+    setEditLicenseFileName("");
     setIsEditOpen(true);
   };
 
@@ -188,6 +300,23 @@ export default function CustomerPage() {
       });
     } catch (error) {
       setNotification({ text: error.message || "Unable to update customer status", type: "error" });
+    }
+  };
+
+  const approveUser = async (record) => {
+    try {
+      const data = await apiRequest(`/api/users/${record._id}/approval`, {
+        method: "PATCH",
+        body: JSON.stringify({ isApprovedByAdmin: true }),
+      });
+
+      if (data.user) {
+        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
+      }
+
+      setNotification({ text: data.message || "Customer approved successfully", type: "success" });
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to approve customer", type: "error" });
     }
   };
 
@@ -249,22 +378,19 @@ export default function CustomerPage() {
               {isLoading && <p className="text-sm text-slate-500">Loading...</p>}
             </div>
 
-            {!canManageCustomers && (
-              <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                Customer users have profile-only access for now.
-              </div>
-            )}
-
-            {canManageCustomers && filteredRecords.length > 0 && (
+            {canViewCustomers && filteredRecords.length > 0 && (
               <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-slate-50 text-slate-700">
                     <tr>
                       <th className="px-4 py-3 font-semibold">Name</th>
                       <th className="px-4 py-3 font-semibold">Email</th>
+                      <th className="px-4 py-3 font-semibold">Agent</th>
                       <th className="px-4 py-3 font-semibold">Phone</th>
                       <th className="px-4 py-3 font-semibold">Office</th>
                       <th className="px-4 py-3 font-semibold">Status</th>
+                      <th className="px-4 py-3 font-semibold">Approval</th>
+                      <th className="px-4 py-3 font-semibold">Plan</th>
                       <th className="px-4 py-3 font-semibold">Actions</th>
                     </tr>
                   </thead>
@@ -273,6 +399,11 @@ export default function CustomerPage() {
                       <tr key={record._id} className="border-t border-slate-100">
                         <td className="px-4 py-3 text-slate-700">{`${record.firstName || ""} ${record.lastName || ""}`.trim()}</td>
                         <td className="px-4 py-3 text-slate-700">{record.email || "-"}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {record.createdBy
+                            ? `${record.createdBy.firstName || ""} ${record.createdBy.lastName || ""}`.trim() || record.createdBy.email || "-"
+                            : "-"}
+                        </td>
                         <td className="px-4 py-3 text-slate-700">{record.phone || "-"}</td>
                         <td className="px-4 py-3 text-slate-700">{record.office || "-"}</td>
                         <td className="px-4 py-3">
@@ -281,20 +412,42 @@ export default function CustomerPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
+                          {record.requiresAdminApproval ? (
+                            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${record.isApprovedByAdmin ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                              {record.isApprovedByAdmin ? "Approved" : "Pending"}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Not Required</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{record.customerPlan || "INDIVIDUAL"}</td>
+                        <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => openEditModal(record)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
-                            >
-                              <PencilSquareIcon className="h-4 w-4" />
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => toggleStatus(record)}
-                              className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                            >
-                              {record.isActive ? "Block" : "Activate"}
-                            </button>
+                            {canApproveUsers && record.requiresAdminApproval && !record.isApprovedByAdmin && (
+                              <button
+                                onClick={() => approveUser(record)}
+                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                              >
+                                Approve
+                              </button>
+                            )}
+                            {canEditCustomers && (
+                              <button
+                                onClick={() => openEditModal(record)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                              >
+                                <PencilSquareIcon className="h-4 w-4" />
+                                Edit
+                              </button>
+                            )}
+                            {canBlockCustomers && (
+                              <button
+                                onClick={() => toggleStatus(record)}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                              >
+                                {record.isActive ? "Block" : "Activate"}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -304,7 +457,7 @@ export default function CustomerPage() {
               </div>
             )}
 
-            {canManageCustomers && !isLoading && filteredRecords.length === 0 && (
+            {canViewCustomers && !isLoading && filteredRecords.length === 0 && (
               <div className="mt-8 rounded-2xl border border-dashed border-primary/20 bg-slate-50 p-8 text-center">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <XCircleIcon className="h-8 w-8" />
@@ -360,6 +513,32 @@ export default function CustomerPage() {
                 <input name="office" value={editFormData.office} onChange={handleEditChange} placeholder="Office" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
               </div>
 
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-700">License Image</p>
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <input
+                    id="edit-customer-license"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => setEditLicenseFileName(event.target.files?.[0]?.name || "")}
+                  />
+                  <label
+                    htmlFor="edit-customer-license"
+                    className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                  >
+                    Add License Pic
+                  </label>
+                  <button
+                    type="button"
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary"
+                  >
+                    Upload
+                  </button>
+                  <p className="text-xs text-slate-500">{editLicenseFileName || "No file selected"}</p>
+                </div>
+              </div>
+
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setIsEditOpen(false)} className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary">Cancel</button>
                 <button type="submit" disabled={isEditSubmitting} className="rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-70">
@@ -371,17 +550,206 @@ export default function CustomerPage() {
         </div>
       )}
 
-      <RegisterUserModal
-        isOpen={isModalOpen}
-        title="Register New Customer"
-        submitLabel="Save Customer"
-        formData={formData}
-        onClose={() => setIsModalOpen(false)}
-        onChange={handleChange}
-        onGeneratePassword={generatePassword}
-        onSubmit={handleSubmit}
-        isSubmitting={isSubmitting}
-      />
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/55 p-3 sm:p-6">
+          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-slate-100 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4 sm:px-6">
+              <div>
+                <h3 className="text-2xl font-bold text-primary">Register New Customer</h3>
+                <p className="mt-1 text-sm text-slate-600">Choose plan type, then create customer account credentials.</p>
+              </div>
+              <button
+                aria-label="Close popup"
+                onClick={() => setIsModalOpen(false)}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4 sm:p-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setCustomerPlan("INDIVIDUAL")}
+                  className={`rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition ${customerPlan === "INDIVIDUAL" ? "border-primary bg-primary/10 text-primary" : "border-slate-300 bg-white text-slate-700"}`}
+                >
+                  Individual Plan
+                  <p className="mt-1 text-xs font-normal text-slate-500">Create exactly one customer account.</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomerPlan("FLEET")}
+                  className={`rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition ${customerPlan === "FLEET" ? "border-primary bg-primary/10 text-primary" : "border-slate-300 bg-white text-slate-700"}`}
+                >
+                  Fleet Plan
+                  <p className="mt-1 text-xs font-normal text-slate-500">Add 2 or more customers with Save and Next flow.</p>
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+                {customerPlan === "FLEET" && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Fleet Members</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {fleetBubbles.map((bubble) => (
+                        <button
+                          key={bubble.step}
+                          type="button"
+                          onClick={() => setFleetTargetCount(Math.max(2, bubble.step))}
+                          className={`flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold transition ${bubble.hasCustomer ? "border-emerald-600 bg-emerald-600 text-white" : bubble.isCurrent ? "border-primary bg-primary text-white" : "border-slate-300 bg-white text-slate-600"}`}
+                          title={`Set fleet count to ${bubble.step}`}
+                        >
+                          {bubble.step}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setFleetTargetCount((prev) => Math.min(20, prev + 1))}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-primary bg-white text-sm font-semibold text-primary transition hover:bg-primary hover:text-white"
+                        title="Add one more customer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-semibold text-slate-700">First Name *</label>
+                    <input
+                      type="text"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleChange}
+                      required={customerPlan === "INDIVIDUAL"}
+                      placeholder="Enter first name"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-slate-700">Last Name *</label>
+                    <input
+                      type="text"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      required={customerPlan === "INDIVIDUAL"}
+                      placeholder="Enter last name"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-slate-700">Email Address *</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      required={customerPlan === "INDIVIDUAL"}
+                      placeholder="Enter email"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-slate-700">Phone Number</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      placeholder="Enter phone number"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold text-slate-700">Password *</label>
+                  <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-1.5 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10">
+                    <input
+                      type="text"
+                      name="password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      required={customerPlan === "INDIVIDUAL"}
+                      placeholder="Enter password"
+                      className="w-full bg-transparent px-1 py-2 text-sm text-slate-800 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={generatePassword}
+                      className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary"
+                    >
+                      Generate
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-700">License Image</p>
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <input
+                      id="customer-license"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => setLicenseFileName(event.target.files?.[0]?.name || "")}
+                    />
+                    <label
+                      htmlFor="customer-license"
+                      className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                    >
+                      Add License Pic
+                    </label>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary"
+                    >
+                      Upload
+                    </button>
+                    <p className="text-xs text-slate-500">{licenseFileName || "No file selected"}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:justify-end">
+                  {customerPlan === "FLEET" && (
+                    <button
+                      type="button"
+                      onClick={addFleetCustomer}
+                      className="rounded-lg border border-primary bg-white px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/10"
+                    >
+                      Save & Add Next
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || (customerPlan === "FLEET" && !fleetCanSubmit)}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {isSubmitting
+                      ? "Saving..."
+                      : customerPlan === "INDIVIDUAL"
+                        ? "Save Customer"
+                        : "Submit Fleet"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

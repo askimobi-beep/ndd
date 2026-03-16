@@ -36,8 +36,8 @@ function App() {
         <Route path="/account" element={<Navigate to="/dashboard" replace />} />
         <Route path="/ticket-checker" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AppLayout><TicketCheckerPage /></AppLayout></ProtectedRoute>} />
         <Route path="/supervisor" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AppLayout><SupervisorPage /></AppLayout></ProtectedRoute>} />
-        <Route path="/agents" element={<ProtectedRoute allowedRoles={["SUPERVISOR"]}><AppLayout><AgentPage /></AppLayout></ProtectedRoute>} />
-        <Route path="/customers" element={<ProtectedRoute allowedRoles={["AGENT"]}><AppLayout><CustomerPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/agents" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR"]}><AppLayout><AgentPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/customers" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT"]}><AppLayout><CustomerPage /></AppLayout></ProtectedRoute>} />
         <Route path="/change-password" element={<ProtectedRoute><AppLayout><ChangePasswordPage /></AppLayout></ProtectedRoute>} />
       </Routes>
     </Router>

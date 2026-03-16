@@ -36,6 +36,39 @@ const userSchema = new mongoose.Schema(
       enum: ["ADMIN", "SUPERVISOR", "TICKET CHECKER", "AGENT", "CUSTOMER"],
       default: "SUPERVISOR",
     },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    supervisorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    requiresAdminApproval: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    isApprovedByAdmin: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    customerPlan: {
+      type: String,
+      enum: ["INDIVIDUAL", "FLEET"],
+      default: "INDIVIDUAL",
+    },
+    fleetGroupId: {
+      type: String,
+      default: "",
+      trim: true,
+      index: true,
+    },
     password: {
       type: String,
       required: true,
