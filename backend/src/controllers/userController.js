@@ -1,4 +1,10 @@
+import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { sendEmail } from "../utils/sendEmail.js";
+
+const PLAN_PRICE = 49.99;
+const PROCESSING_FEE = 1.85;
+const TOTAL_AMOUNT = Number((PLAN_PRICE + PROCESSING_FEE).toFixed(2));
 
 const CREATABLE_ROLES = {
   ADMIN: ["SUPERVISOR", "TICKET CHECKER", "CUSTOMER"],
@@ -84,10 +90,36 @@ function canAccessUserRecord(req, user, { forWrite = false } = {}) {
   return false;
 }
 
+function canManageCustomerPayment(req, user) {
+  const actorRole = normalizeRole(req.user?.role);
+  const actorId = String(req.user?._id || "");
+  const recordRole = normalizeRole(user?.role);
+  const createdBy = String(user?.createdBy || "");
+
+  if (recordRole !== "CUSTOMER") {
+    return false;
+  }
+
+  if (actorRole === "ADMIN") {
+    return true;
+  }
+
+  if (actorRole === "SUPERVISOR") {
+    return true;
+  }
+
+  if (actorRole === "AGENT") {
+    return createdBy && createdBy === actorId;
+  }
+
+  return false;
+}
+
 function buildScopedFilter(req, role) {
   const actorRole = normalizeRole(req.user?.role);
   const actorId = req.user?._id;
   const targetRole = normalizeRole(role);
+  const scope = String(req.query?.scope || "").trim().toLowerCase();
 
   if (actorRole === "ADMIN") {
     return { role: targetRole };
@@ -99,7 +131,7 @@ function buildScopedFilter(req, role) {
     }
 
     if (targetRole === "CUSTOMER") {
-      return { role: "CUSTOMER", supervisorId: actorId };
+      return { role: "CUSTOMER" };
     }
 
     return null;
@@ -107,6 +139,10 @@ function buildScopedFilter(req, role) {
 
   if (actorRole === "AGENT") {
     if (targetRole === "CUSTOMER") {
+      if (scope === "claim") {
+        return { role: "CUSTOMER" };
+      }
+
       return { role: "CUSTOMER", createdBy: actorId };
     }
 
@@ -158,6 +194,9 @@ function buildUserPayload(body, forcedRole) {
     role: forcedRole || body.role || "SUPERVISOR",
     phone: String(body.phone || "").trim(),
     office: String(body.office || "Lahore Office (LHR)").trim(),
+    licenseNo: String(body.licenseNo || "").trim(),
+    dot: String(body.dot || "").trim(),
+    state: String(body.state || "").trim(),
   };
 }
 
@@ -488,6 +527,253 @@ export async function updateUserApproval(req, res, next) {
       user,
     });
   } catch (error) {
+    return next(error);
+  }
+}
+
+export async function searchUserByPhone(req, res, next) {
+  try {
+    const { phone } = req.query;
+
+    if (!phone) {
+      res.status(400);
+      throw new Error("Phone number is required");
+    }
+
+    const user = await User.findOne({ phone: String(phone).trim() })
+      .populate("createdBy", "firstName lastName email role")
+      .populate("supervisorId", "firstName lastName email role");
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    return res.json({
+      message: "User found",
+      user,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+
+    return next(error);
+  }
+}
+
+function getFrontendBaseUrl(req) {
+  const configured = String(process.env.FRONTEND_URL || "http://localhost:3000")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  if (configured.length) {
+    return configured[0].replace(/\/+$/, "");
+  }
+
+  const protocol = req.protocol || "http";
+  const host = req.get("host") || "localhost:3000";
+  return `${protocol}://${host}`;
+}
+
+function createPaymentToken(customerId) {
+  return jwt.sign(
+    {
+      type: "payment_checkout",
+      customerId: String(customerId),
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.PAYMENT_LINK_EXPIRES_IN || "14d",
+    }
+  );
+}
+
+function buildInvoiceHtml({ customer, paymentUrl }) {
+  const fullName = `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || "Customer";
+  const frontendBase = String(process.env.FRONTEND_URL || "http://localhost:3000")
+    .split(",")[0]
+    .trim()
+    .replace(/\/+$/, "");
+  const logoUrl = `${frontendBase}/ndd%20logo%20without%20bg.webp`;
+
+  return `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NDD Payment Invoice</title>
+</head>
+<body style="margin:0;background:#f3f4f6;font-family:Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:640px;margin:0 auto;padding:20px 16px;">
+    <div style="text-align:center;padding:8px 0 18px;">
+      <img src="${logoUrl}" alt="NDD" style="height:56px;object-fit:contain;" />
+      <div style="font-size:12px;color:#94a3b8;margin-top:6px;">Secure Checkout</div>
+    </div>
+
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
+      <div style="font-size:12px;color:#64748b;">Order for ${fullName}</div>
+      <div style="font-size:26px;font-weight:700;margin-top:4px;">Individual Protection Plan</div>
+      <div style="font-size:13px;color:#475569;margin-top:4px;">Full coverage protection with 24/7 support for USA</div>
+
+      <div style="margin-top:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;">
+        <table style="width:100%;font-size:14px;color:#0f172a;border-collapse:collapse;">
+          <tr><td style="padding:4px 0;">Plan Price</td><td style="padding:4px 0;text-align:right;font-weight:600;">$${PLAN_PRICE.toFixed(2)}</td></tr>
+          <tr><td style="padding:4px 0;">Processing Fee</td><td style="padding:4px 0;text-align:right;font-weight:600;">$${PROCESSING_FEE.toFixed(2)}</td></tr>
+          <tr><td colspan="2" style="border-top:1px solid #e2e8f0;padding-top:8px;"></td></tr>
+          <tr><td style="font-weight:700;">Total Amount</td><td style="text-align:right;font-weight:800;font-size:20px;color:#0b4c8c;">$${TOTAL_AMOUNT.toFixed(2)}</td></tr>
+        </table>
+      </div>
+
+      <div style="margin-top:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px;">Customer Information</div>
+        <table style="width:100%;font-size:14px;border-collapse:collapse;">
+          <tr><td style="padding:4px 0;color:#64748b;">Name</td><td style="padding:4px 0;text-align:right;font-weight:600;">${fullName}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b;">Email</td><td style="padding:4px 0;text-align:right;font-weight:600;">${customer.email || "-"}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b;">Phone</td><td style="padding:4px 0;text-align:right;font-weight:600;">${customer.phone || "-"}</td></tr>
+        </table>
+      </div>
+
+      <div style="margin-top:16px;">
+        <a href="${paymentUrl}" style="display:inline-block;background:#0b4c8c;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:700;">Pay $${TOTAL_AMOUNT.toFixed(2)}</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export async function generateCustomerPaymentLink(req, res, next) {
+  try {
+    const customer = await User.findById(req.params.id).populate("createdBy", "firstName lastName email role");
+
+    if (!customer || normalizeRole(customer.role) !== "CUSTOMER") {
+      res.status(404);
+      throw new Error("Customer not found");
+    }
+
+    if (!canManageCustomerPayment(req, customer)) {
+      return res.status(403).json({ message: "Forbidden: insufficient permissions" });
+    }
+
+    const token = createPaymentToken(customer._id);
+    const paymentUrl = `${getFrontendBaseUrl(req)}/payment/${token}`;
+
+    return res.json({
+      message: "Payment link generated",
+      paymentUrl,
+      amount: TOTAL_AMOUNT,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function sendCustomerPaymentInvoiceEmail(req, res, next) {
+  try {
+    const customer = await User.findById(req.params.id).populate("createdBy", "firstName lastName email role");
+
+    if (!customer || normalizeRole(customer.role) !== "CUSTOMER") {
+      res.status(404);
+      throw new Error("Customer not found");
+    }
+
+    if (!canManageCustomerPayment(req, customer)) {
+      return res.status(403).json({ message: "Forbidden: insufficient permissions" });
+    }
+
+    const token = createPaymentToken(customer._id);
+    const paymentUrl = `${getFrontendBaseUrl(req)}/payment/${token}`;
+    const html = buildInvoiceHtml({ customer, paymentUrl });
+
+    await sendEmail({
+      to: customer.email,
+      subject: "NDD Payment Invoice - Individual Protection Plan",
+      text: `Please complete your payment using this secure link: ${paymentUrl}`,
+      html,
+    });
+
+    return res.json({
+      message: "Payment invoice sent successfully",
+      paymentUrl,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getPaymentCheckoutDetails(req, res, next) {
+  try {
+    const { token } = req.params;
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (payload?.type !== "payment_checkout" || !payload?.customerId) {
+      res.status(400);
+      throw new Error("Invalid payment token");
+    }
+
+    const customer = await User.findById(payload.customerId).select("firstName lastName email phone office createdAt paymentStatus paymentSubmittedAt");
+
+    if (!customer) {
+      res.status(404);
+      throw new Error("Customer not found");
+    }
+
+    return res.json({
+      customer,
+      invoice: {
+        planName: "Individual Protection Plan",
+        planPrice: PLAN_PRICE,
+        processingFee: PROCESSING_FEE,
+        totalAmount: TOTAL_AMOUNT,
+        billingCycle: "monthly",
+      },
+    });
+  } catch (error) {
+    if (error?.name === "TokenExpiredError" || error?.name === "JsonWebTokenError") {
+      return res.status(400).json({ message: "Payment link is invalid or expired" });
+    }
+
+    return next(error);
+  }
+}
+
+export async function submitPaymentCheckout(req, res, next) {
+  try {
+    const { token } = req.params;
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (payload?.type !== "payment_checkout" || !payload?.customerId) {
+      res.status(400);
+      throw new Error("Invalid payment token");
+    }
+
+    const customer = await User.findById(payload.customerId);
+
+    if (!customer || normalizeRole(customer.role) !== "CUSTOMER") {
+      res.status(404);
+      throw new Error("Customer not found");
+    }
+
+    if (customer.paymentStatus !== "UNDER_REVIEW") {
+      customer.paymentStatus = "UNDER_REVIEW";
+      customer.paymentSubmittedAt = new Date();
+      customer.requiresAdminApproval = true;
+      customer.isApprovedByAdmin = false;
+      await customer.save();
+    }
+
+    return res.json({
+      message: "Payment submitted successfully. Your account is now under review.",
+      user: customer,
+    });
+  } catch (error) {
+    if (error?.name === "TokenExpiredError" || error?.name === "JsonWebTokenError") {
+      return res.status(400).json({ message: "Payment link is invalid or expired" });
+    }
+
     return next(error);
   }
 }

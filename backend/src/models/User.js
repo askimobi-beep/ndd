@@ -31,6 +31,21 @@ const userSchema = new mongoose.Schema(
       default: "Lahore Office (LHR)",
       trim: true,
     },
+    licenseNo: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    dot: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    state: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     role: {
       type: String,
       enum: ["ADMIN", "SUPERVISOR", "TICKET CHECKER", "AGENT", "CUSTOMER"],
@@ -62,6 +77,16 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["INDIVIDUAL", "FLEET"],
       default: "INDIVIDUAL",
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["UNPAID", "UNDER_REVIEW", "PAID_APPROVED"],
+      default: "UNPAID",
+      index: true,
+    },
+    paymentSubmittedAt: {
+      type: Date,
+      default: null,
     },
     fleetGroupId: {
       type: String,

@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
   XCircleIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  DocumentIcon,
+  EllipsisHorizontalIcon,
 } from "@heroicons/react/24/outline";
 import TopNavbar from "../components/TopNavbar";
 import { apiRequest } from "../utils/api";
@@ -11,6 +18,7 @@ import { getAuthUser, hasAnyRole } from "../utils/auth";
 
 export default function CustomerPage() {
   const user = getAuthUser();
+  const navigate = useNavigate();
   const canManageCustomers = hasAnyRole(user?.role, ["AGENT"]);
   const canViewCustomers = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
   const canApproveUsers = hasAnyRole(user?.role, ["ADMIN"]);
@@ -33,10 +41,15 @@ export default function CustomerPage() {
     email: "",
     phone: "",
     office: "",
+    licenseNo: "",
+    dot: "",
+    state: "",
   });
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [quickFilter, setQuickFilter] = useState("ALL");
+  const [dateFilter, setDateFilter] = useState("ALL");
   const [formData, setFormData] = useState({
     office: "Lahore Office (LHR)",
     firstName: "",
@@ -44,6 +57,9 @@ export default function CustomerPage() {
     email: "",
     phone: "",
     password: "",
+    licenseNo: "",
+    dot: "",
+    state: "",
   });
 
   const generatePassword = () => {
@@ -97,6 +113,9 @@ export default function CustomerPage() {
       email: "",
       phone: "",
       password: "",
+      licenseNo: "",
+      dot: "",
+      state: "",
     });
     setFleetCustomers([]);
     setCustomerPlan("INDIVIDUAL");
@@ -126,11 +145,38 @@ export default function CustomerPage() {
 
   const filteredRecords = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) {
-      return records;
-    }
+    const now = Date.now();
 
     return records.filter((record) => {
+      if (quickFilter === "PENDING" && (record.isApprovedByAdmin || !record.requiresAdminApproval)) {
+        return false;
+      }
+
+      if (quickFilter === "CANCELLED" && record.isActive) {
+        return false;
+      }
+
+      if (dateFilter !== "ALL") {
+        const createdAt = new Date(record.createdAt).getTime();
+        const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
+
+        if (dateFilter === "LAST_WEEK" && diffDays > 7) {
+          return false;
+        }
+
+        if (dateFilter === "LAST_MONTH" && diffDays > 30) {
+          return false;
+        }
+
+        if (dateFilter === "LAST_YEAR" && diffDays > 365) {
+          return false;
+        }
+      }
+
+      if (!query) {
+        return true;
+      }
+
       const fullName = `${record.firstName || ""} ${record.lastName || ""}`.toLowerCase();
       return (
         fullName.includes(query) ||
@@ -138,7 +184,17 @@ export default function CustomerPage() {
         String(record.phone || "").toLowerCase().includes(query)
       );
     });
-  }, [records, search]);
+  }, [records, search, quickFilter, dateFilter]);
+
+  const pendingCount = useMemo(
+    () => records.filter((record) => !record.isApprovedByAdmin && record.requiresAdminApproval).length,
+    [records]
+  );
+
+  const cancelledCount = useMemo(
+    () => records.filter((record) => !record.isActive).length,
+    [records]
+  );
 
   const addFleetCustomer = () => {
     if (!canSaveCurrentCustomer) {
@@ -250,6 +306,9 @@ export default function CustomerPage() {
       email: record.email || "",
       phone: record.phone || "",
       office: record.office || "",
+      licenseNo: record.licenseNo || "",
+      dot: record.dot || "",
+      state: record.state || "",
     });
     setEditLicenseFileName("");
     setIsEditOpen(true);
@@ -347,113 +406,258 @@ export default function CustomerPage() {
             </div>
           </div>
 
+          {/* Quick Actions & Filters Section */}
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Filters</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-900">Refine customer records</h3>
+            <div className="space-y-6">
+              {/* Quick Actions */}
+              <div className="flex flex-col gap-4">
+                <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Quick Actions</p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => setQuickFilter((prev) => (prev === "PENDING" ? "ALL" : "PENDING"))}
+                    className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
+                      quickFilter === "PENDING"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:bg-primary/5 hover:text-primary"
+                    }`}
+                  >
+                    <ExclamationCircleIcon className="h-4 w-4" />
+                    Pending Approvals ({pendingCount})
+                  </button>
+                  <button
+                    onClick={() => setQuickFilter((prev) => (prev === "CANCELLED" ? "ALL" : "CANCELLED"))}
+                    className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
+                      quickFilter === "CANCELLED"
+                        ? "border-rose-500 bg-rose-50 text-rose-700"
+                        : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:bg-primary/5 hover:text-primary"
+                    }`}
+                  >
+                    <XCircleIcon className="h-4 w-4" />
+                    Cancelled ({cancelledCount})
+                  </button>
+                  <button
+                    onClick={() => navigate("/reservation-management")}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-secondary"
+                  >
+                    <DocumentIcon className="h-4 w-4" />
+                    Reservation Management
+                  </button>
+                  <button
+                    onClick={() => navigate("/check-reservation")}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  >
+                    <CheckCircleIcon className="h-4 w-4" />
+                    Check Reservation
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10 sm:min-w-[240px]">
-                <MagnifyingGlassIcon className="h-5 w-5 flex-shrink-0 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search customers…"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                />
+
+              {/* Filters */}
+              <div className="flex flex-col gap-4 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between sm:border-t-0 sm:pt-0">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Filters</p>
+                  <h3 className="mt-1 text-sm font-semibold text-slate-900">Search & Find Customer</h3>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setDateFilter("LAST_WEEK")}
+                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                        dateFilter === "LAST_WEEK"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                      }`}
+                    >
+                      Last Week
+                    </button>
+                    <button
+                      onClick={() => setDateFilter("LAST_MONTH")}
+                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                        dateFilter === "LAST_MONTH"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                      }`}
+                    >
+                      Last Month
+                    </button>
+                    <button
+                      onClick={() => setDateFilter("LAST_YEAR")}
+                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                        dateFilter === "LAST_YEAR"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                      }`}
+                    >
+                      Last Year
+                    </button>
+                    <button
+                      onClick={() => setDateFilter("ALL")}
+                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                        dateFilter === "ALL"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                      }`}
+                    >
+                      All
+                    </button>
+                  </div>
+                  <select className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-primary focus:border-primary focus:outline-none">
+                    <option>Name</option>
+                    <option>Email</option>
+                    <option>Phone</option>
+                  </select>
+                  <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10 sm:min-w-[240px]">
+                    <MagnifyingGlassIcon className="h-5 w-5 flex-shrink-0 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search…"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last Week</button>
-              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last Month</button>
-              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last 2 Months</button>
-              <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last 6 Months</button>
             </div>
           </div>
 
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-8">
             <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-semibold text-slate-900">Customer Table</h3>
+              <h3 className="text-2xl font-semibold text-slate-900">Customer Records</h3>
               {isLoading && <p className="text-sm text-slate-500">Loading...</p>}
             </div>
 
             {canViewCustomers && filteredRecords.length > 0 && (
-              <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-slate-700">
-                    <tr>
-                      <th className="px-4 py-3 font-semibold">Name</th>
-                      <th className="px-4 py-3 font-semibold">Email</th>
-                      <th className="px-4 py-3 font-semibold">Agent</th>
-                      <th className="px-4 py-3 font-semibold">Phone</th>
-                      <th className="px-4 py-3 font-semibold">Office</th>
-                      <th className="px-4 py-3 font-semibold">Status</th>
-                      <th className="px-4 py-3 font-semibold">Approval</th>
-                      <th className="px-4 py-3 font-semibold">Plan</th>
-                      <th className="px-4 py-3 font-semibold">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRecords.map((record) => (
-                      <tr key={record._id} className="border-t border-slate-100">
-                        <td className="px-4 py-3 text-slate-700">{`${record.firstName || ""} ${record.lastName || ""}`.trim()}</td>
-                        <td className="px-4 py-3 text-slate-700">{record.email || "-"}</td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {record.createdBy
-                            ? `${record.createdBy.firstName || ""} ${record.createdBy.lastName || ""}`.trim() || record.createdBy.email || "-"
-                            : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">{record.phone || "-"}</td>
-                        <td className="px-4 py-3 text-slate-700">{record.office || "-"}</td>
-                        <td className="px-4 py-3">
-                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${record.isActive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
-                            {record.isActive ? "Active" : "Inactive"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {record.requiresAdminApproval ? (
-                            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${record.isApprovedByAdmin ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                              {record.isApprovedByAdmin ? "Approved" : "Pending"}
-                            </span>
-                          ) : (
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Not Required</span>
+              <div className="mt-6 space-y-4">
+                {filteredRecords.map((record) => (
+                  <div key={record._id} className="rounded-2xl border border-slate-200 p-6 hover:border-primary/50 transition">
+                    <div className="grid gap-6 lg:grid-cols-5">
+                      {/* User Information */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary mb-3 flex items-center gap-1">
+                          👤 User Information
+                        </p>
+                        <div className="space-y-2">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{`${record.firstName || ""} ${record.lastName || ""}`.trim()}</p>
+                            <p className="text-xs text-slate-500">ID: M-{record._id.substring(0, 6).toUpperCase()}</p>
+                          </div>
+                          <div>
+                            <span className="inline-block rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 text-xs font-semibold">{record.customerPlan || "INDIVIDUAL"}</span>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-600">Joined: {new Date(record.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                          </div>
+                          {record.createdBy && (
+                            <div>
+                              <p className="text-xs font-semibold text-slate-600">Agent: {`${record.createdBy.firstName || ""} ${record.createdBy.lastName || ""}`.trim() || record.createdBy.email || "-"}</p>
+                            </div>
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">{record.customerPlan || "INDIVIDUAL"}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-2">
-                            {canApproveUsers && record.requiresAdminApproval && !record.isApprovedByAdmin && (
-                              <button
-                                onClick={() => approveUser(record)}
-                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
-                              >
-                                Approve
-                              </button>
-                            )}
-                            {canEditCustomers && (
-                              <button
-                                onClick={() => openEditModal(record)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
-                              >
-                                <PencilSquareIcon className="h-4 w-4" />
-                                Edit
-                              </button>
-                            )}
-                            {canBlockCustomers && (
-                              <button
-                                onClick={() => toggleStatus(record)}
-                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                              >
-                                {record.isActive ? "Block" : "Activate"}
-                              </button>
+                        </div>
+                      </div>
+
+                      {/* Contact Details */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-green-700 mb-3 flex items-center gap-1">
+                          ✉️ Contact Details
+                        </p>
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2">
+                            <EnvelopeIcon className="h-4 w-4 flex-shrink-0 text-slate-500 mt-0.5" />
+                            <div>
+                              <p className="text-xs font-medium text-slate-600">Email</p>
+                              <p className="text-xs text-slate-800 break-all">{record.email || "-"}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <PhoneIcon className="h-4 w-4 flex-shrink-0 text-slate-500 mt-0.5" />
+                            <div>
+                              <p className="text-xs font-medium text-slate-600">Phone</p>
+                              <p className="text-xs text-slate-800">{record.phone || "-"}</p>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-slate-600">Office</p>
+                            <span className="inline-block rounded-full bg-blue-50 text-blue-700 px-2 py-1 text-xs font-medium">{record.office || "-"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Documents */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-violet-700 mb-3 flex items-center gap-1">
+                          📄 Documents
+                        </p>
+                        <div className="space-y-2">
+                          <div>
+                            <p className="text-xs font-medium text-slate-600">License</p>
+                            <span className="inline-block rounded-full bg-purple-50 text-purple-700 px-2 py-1 text-xs font-medium">{record.licenseNo || "NO"}</span>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-slate-600">DOT</p>
+                            <span className="inline-block rounded-full bg-purple-50 text-purple-700 px-2 py-1 text-xs font-medium">{record.dot || "NO"}</span>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-slate-600">State</p>
+                            <span className="inline-block rounded-full bg-purple-50 text-purple-700 px-2 py-1 text-xs font-medium">{record.state || "-"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700 mb-3 flex items-center gap-1">
+                          🔔 Status
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-slate-600">Approval</p>
+                            <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${record.isApprovedByAdmin ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                              {record.isApprovedByAdmin ? "✓ Approved" : "⏳ Pending"}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-slate-600">Status</p>
+                            <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${record.isActive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                              {record.isActive ? "● ACTIVE" : "● INACTIVE"}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs text-slate-500">Joined: {new Date(record.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                            {!record.isActive && (
+                              <p className="text-xs text-rose-600">Cancelled: {new Date(record.updatedAt || record.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                             )}
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 mb-3 flex items-center gap-1">
+                          ⚙️ Actions
+                        </p>
+                        <div className="flex flex-col gap-1">
+                          <button className="rounded-lg bg-blue-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-blue-600">
+                            ✓ Subscription
+                          </button>
+                          <button className="rounded-lg bg-orange-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-orange-600">
+                            📋 Invoices
+                          </button>
+                          <button className="rounded-lg bg-green-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-green-600">
+                            🎫 Tickets
+                          </button>
+                          <button className="rounded-lg bg-purple-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-purple-600">
+                            💳 Payment Methods
+                          </button>
+                          <button onClick={() => openEditModal(record)} className="rounded-lg border border-slate-300 text-slate-700 px-2.5 py-1.5 text-xs font-semibold transition hover:border-primary hover:text-primary flex items-center justify-center gap-1">
+                            <EllipsisHorizontalIcon className="h-4 w-4" />
+                            More Actions
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -506,6 +710,18 @@ export default function CustomerPage() {
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">Phone</label>
                   <input name="phone" value={editFormData.phone} onChange={handleEditChange} placeholder="Phone" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">License No</label>
+                  <input name="licenseNo" value={editFormData.licenseNo} onChange={handleEditChange} placeholder="License Number" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">DOT</label>
+                  <input name="dot" value={editFormData.dot} onChange={handleEditChange} placeholder="DOT" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">State</label>
+                  <input name="state" value={editFormData.state} onChange={handleEditChange} placeholder="State" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
                 </div>
               </div>
               <div>
@@ -663,6 +879,42 @@ export default function CustomerPage() {
                       value={formData.phone}
                       onChange={handleChange}
                       placeholder="Enter phone number"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-slate-700">License No</label>
+                    <input
+                      type="text"
+                      name="licenseNo"
+                      value={formData.licenseNo}
+                      onChange={handleChange}
+                      placeholder="Enter license number"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-slate-700">DOT</label>
+                    <input
+                      type="text"
+                      name="dot"
+                      value={formData.dot}
+                      onChange={handleChange}
+                      placeholder="Enter DOT"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-slate-700">State</label>
+                    <input
+                      type="text"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleChange}
+                      placeholder="Enter state"
                       className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                     />
                   </div>
