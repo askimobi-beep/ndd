@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   MagnifyingGlassIcon,
-  PencilSquareIcon,
   PlusIcon,
   XCircleIcon,
   CheckCircleIcon,
@@ -21,9 +20,6 @@ export default function CustomerPage() {
   const navigate = useNavigate();
   const canManageCustomers = hasAnyRole(user?.role, ["AGENT"]);
   const canViewCustomers = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
-  const canApproveUsers = hasAnyRole(user?.role, ["ADMIN"]);
-  const canEditCustomers = hasAnyRole(user?.role, ["AGENT"]);
-  const canBlockCustomers = hasAnyRole(user?.role, ["ADMIN", "AGENT"]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notification, setNotification] = useState({ text: "", type: "success" });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -339,43 +335,6 @@ export default function CustomerPage() {
       setNotification({ text: error.message || "Unable to update customer", type: "error" });
     } finally {
       setIsEditSubmitting(false);
-    }
-  };
-
-  const toggleStatus = async (record) => {
-    try {
-      const data = await apiRequest(`/api/users/${record._id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ isActive: !record.isActive }),
-      });
-
-      if (data.user) {
-        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
-      }
-
-      setNotification({
-        text: data.user?.isActive ? "Customer activated successfully" : "Customer blocked successfully",
-        type: "success",
-      });
-    } catch (error) {
-      setNotification({ text: error.message || "Unable to update customer status", type: "error" });
-    }
-  };
-
-  const approveUser = async (record) => {
-    try {
-      const data = await apiRequest(`/api/users/${record._id}/approval`, {
-        method: "PATCH",
-        body: JSON.stringify({ isApprovedByAdmin: true }),
-      });
-
-      if (data.user) {
-        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
-      }
-
-      setNotification({ text: data.message || "Customer approved successfully", type: "success" });
-    } catch (error) {
-      setNotification({ text: error.message || "Unable to approve customer", type: "error" });
     }
   };
 
