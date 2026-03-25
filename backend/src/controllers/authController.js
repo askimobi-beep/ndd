@@ -78,7 +78,22 @@ export async function login(req, res, next) {
 
     if (user.requiresAdminApproval && !user.isApprovedByAdmin) {
       res.status(403);
-      throw new Error("Your account is pending approval. Kindly complete your payment for approval.");
+
+      if (String(user.role || "").toUpperCase() === "CUSTOMER") {
+        if (user.paymentStatus === "UNPAID") {
+          throw new Error("Your account is pending approval. Kindly complete your payment first.");
+        }
+
+        if (user.paymentStatus === "UNDER_REVIEW") {
+          throw new Error("Your payment is under review. Please wait for payment confirmation.");
+        }
+
+        if (user.paymentStatus === "PAID_APPROVED") {
+          throw new Error("Payment confirmed. Your account is pending final admin approval.");
+        }
+      }
+
+      throw new Error("Your account is pending admin approval.");
     }
 
     if (!user.isActive) {
@@ -101,6 +116,10 @@ export async function login(req, res, next) {
         isActive: user.isActive,
         requiresAdminApproval: user.requiresAdminApproval,
         isApprovedByAdmin: user.isApprovedByAdmin,
+        paymentStatus: user.paymentStatus,
+        paymentMethod: user.paymentMethod,
+        subscriptionStartAt: user.subscriptionStartAt,
+        subscriptionEndAt: user.subscriptionEndAt,
       },
     });
   } catch (error) {

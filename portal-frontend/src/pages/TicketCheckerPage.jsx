@@ -4,13 +4,17 @@ import RegisterUserModal from "../components/RegisterUserModal";
 import { apiRequest } from "../utils/api";
 import { getAuthUser, hasAnyRole } from "../utils/auth";
 import {
+  HomeIcon,
+  ScaleIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
+import { useNavigate } from "react-router-dom";
 
 export default function TicketCheckerPage() {
+  const navigate = useNavigate();
   const user = getAuthUser();
   const canManageTicketCheckers = hasAnyRole(user?.role, ["ADMIN"]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -209,13 +213,29 @@ export default function TicketCheckerPage() {
               </div>
 
               {canManageTicketCheckers && (
-                <button
-                  onClick={() => setIsModalOpen(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-base font-semibold text-primary transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-xl"
-                >
-                  <PlusIcon className="h-5 w-5" />
-                  Add Ticket Checker
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={() => navigate("/dashboard")}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-white/20"
+                  >
+                    <HomeIcon className="h-5 w-5" />
+                    Dashboard
+                  </button>
+                  <button
+                    onClick={() => navigate("/lawyers")}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-white/20"
+                  >
+                    <ScaleIcon className="h-5 w-5" />
+                    Lawyers
+                  </button>
+                  <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-base font-semibold text-primary transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-xl"
+                  >
+                    <PlusIcon className="h-5 w-5" />
+                    Add Ticket Checker
+                  </button>
+                </div>
               )}
             </div>
           </div>

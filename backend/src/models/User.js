@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["ADMIN", "SUPERVISOR", "TICKET CHECKER", "AGENT", "CUSTOMER"],
+      enum: ["ADMIN", "SUPERVISOR", "TICKET CHECKER", "LAWYER", "AGENT", "CUSTOMER"],
       default: "SUPERVISOR",
     },
     createdBy: {
@@ -84,10 +84,59 @@ const userSchema = new mongoose.Schema(
       default: "UNPAID",
       index: true,
     },
+    paymentMethod: {
+      type: String,
+      enum: ["NONE", "CREDIT_CARD", "BANK_TRANSFER"],
+      default: "NONE",
+    },
     paymentSubmittedAt: {
       type: Date,
       default: null,
     },
+    paymentConfirmedAt: {
+      type: Date,
+      default: null,
+    },
+    subscriptionStartAt: {
+      type: Date,
+      default: null,
+    },
+    subscriptionEndAt: {
+      type: Date,
+      default: null,
+    },
+    invoices: [
+      {
+        invoiceNumber: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        amount: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+        status: {
+          type: String,
+          enum: ["UNPAID", "UNDER_REVIEW", "PAID"],
+          default: "UNPAID",
+        },
+        paymentMethod: {
+          type: String,
+          enum: ["NONE", "CREDIT_CARD", "BANK_TRANSFER"],
+          default: "NONE",
+        },
+        issuedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        paidAt: {
+          type: Date,
+          default: null,
+        },
+      },
+    ],
     fleetGroupId: {
       type: String,
       default: "",

@@ -15,11 +15,13 @@ export default function Sidebar() {
   const user = getAuthUser();
   const displayName = user?.fullName || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Admin User";
   const displayRole = formatRoleLabel(user?.role);
-  const canManageUsers = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
   const canViewTicketMakerPage = hasAnyRole(user?.role, ["ADMIN", "TICKET CHECKER"]);
+  const canViewLawyerPage = hasAnyRole(user?.role, ["ADMIN", "TICKET CHECKER"]);
   const canViewSupervisorPage = hasAnyRole(user?.role, ["ADMIN"]);
   const canViewAgentPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR"]);
   const canViewCustomerPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
+  const canViewPendingApprovalsPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
+  const canManageUsers = canViewTicketMakerPage || canViewLawyerPage || canViewSupervisorPage || canViewAgentPage || canViewCustomerPage || canViewPendingApprovalsPage;
   const linkBaseClass = "flex items-center gap-4 px-5 py-3 rounded-xl transition-all duration-300 cursor-pointer";
   const linkActiveClass = "bg-gradient-to-r from-secondary to-primary shadow-md";
   const linkIdleClass = "hover:bg-secondary/70";
@@ -94,6 +96,14 @@ export default function Sidebar() {
                     Ticket Checker
                   </NavLink>
                 )}
+                {canViewLawyerPage && (
+                  <NavLink
+                    to="/lawyers"
+                    className={({ isActive }) => `px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-secondary/80 shadow-sm' : 'hover:bg-secondary/60'}`}
+                  >
+                    Lawyers
+                  </NavLink>
+                )}
                 {canViewSupervisorPage && (
                   <NavLink
                     to="/supervisor"
@@ -116,6 +126,14 @@ export default function Sidebar() {
                     className={({ isActive }) => `px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-secondary/80 shadow-sm' : 'hover:bg-secondary/60'}`}
                   >
                     Customers
+                  </NavLink>
+                )}
+                {canViewPendingApprovalsPage && (
+                  <NavLink
+                    to="/pending-approvals"
+                    className={({ isActive }) => `px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-secondary/80 shadow-sm' : 'hover:bg-secondary/60'}`}
+                  >
+                    Pending Approvals
                   </NavLink>
                 )}
               </div>

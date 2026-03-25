@@ -47,10 +47,14 @@ export default function HomeLogin() {
     } catch (error) {
       if (error.message === "Failed to fetch") {
         setErrorMessage("Cannot connect to backend API. Start backend server on http://localhost:5000.");
+      } else if (String(error.message || "").toLowerCase().includes("payment is under review")) {
+        setErrorMessage("Your payment is under review. Please wait for admin payment confirmation.");
+      } else if (String(error.message || "").toLowerCase().includes("final admin approval")) {
+        setErrorMessage("Payment confirmed. Your account is pending final admin approval.");
       } else if (String(error.message || "").toLowerCase().includes("pending admin approval")) {
         setErrorMessage("Your account is pending admin approval. Please wait for admin confirmation.");
       } else if (String(error.message || "").toLowerCase().includes("pending approval")) {
-        setErrorMessage("Your account is pending approval. Kindly complete your payment for approval.");
+        setErrorMessage("Your account is pending approval. Kindly complete your payment first.");
       } else if (String(error.message || "").toLowerCase().includes("blocked") || String(error.message || "").toLowerCase().includes("inactive")) {
         setErrorMessage("Your account is blocked. Contact admin.");
       } else {

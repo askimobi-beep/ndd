@@ -5,8 +5,12 @@ import {
   createFleetCustomers,
   createSupervisor,
   createTicketChecker,
+  createLawyer,
   createUser,
+  claimCustomer,
+  confirmCustomerPayment,
   generateCustomerPaymentLink,
+  getCustomerInvoices,
   getPaymentCheckoutDetails,
   submitPaymentCheckout,
   getUserById,
@@ -27,17 +31,21 @@ router.post("/payment-checkout/:token/submit", submitPaymentCheckout);
 router.use(protect);
 
 router.get("/search", authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), searchUserByPhone);
-router.route("/").post(authorizeRoles("ADMIN"), createUser).get(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), listUsers);
+router.route("/").post(authorizeRoles("ADMIN"), createUser).get(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"), listUsers);
 router.post("/supervisors", authorizeRoles("ADMIN"), createSupervisor);
 router.post("/ticket-checkers", authorizeRoles("ADMIN"), createTicketChecker);
 router.post("/ticket-makers", authorizeRoles("ADMIN"), createTicketChecker);
+router.post("/lawyers", authorizeRoles("TICKET CHECKER"), createLawyer);
 router.post("/agents", authorizeRoles("SUPERVISOR"), createAgent);
 router.post("/customers", authorizeRoles("ADMIN", "AGENT"), createCustomer);
 router.post("/customers/fleet", authorizeRoles("AGENT"), createFleetCustomers);
+router.post("/:id/claim", authorizeRoles("AGENT"), claimCustomer);
 router.get("/:id/payment-link", authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), generateCustomerPaymentLink);
 router.post("/:id/payment-link/email", authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), sendCustomerPaymentInvoiceEmail);
-router.route("/:id").get(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), getUserById).patch(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), updateUser);
-router.route("/:id/status").patch(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), updateUserStatus);
+router.route("/:id").get(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"), getUserById).patch(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"), updateUser);
+router.route("/:id/status").patch(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"), updateUserStatus);
 router.route("/:id/approval").patch(authorizeRoles("ADMIN"), updateUserApproval);
+router.route("/:id/payment-confirmation").patch(authorizeRoles("ADMIN"), confirmCustomerPayment);
+router.route("/:id/invoices").get(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), getCustomerInvoices);
 
 export default router;

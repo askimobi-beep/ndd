@@ -5,11 +5,13 @@ import HomeLogin from './pages/HomeLogin';
 import SignUpPage from './pages/SignUp';
 import AccountPage from './pages/AccountPage';
 import TicketCheckerPage from './pages/TicketCheckerPage';
+import LawyerPage from './pages/LawyerPage';
 import SupervisorPage from './pages/SupervisorPage';
 import AgentPage from './pages/AgentPage';
 import CustomerPage from './pages/CustomerPage';
 import CheckReservationPage from './pages/CheckReservationPage';
 import ReservationManagementPage from './pages/ReservationManagementPage';
+import PendingApprovalsPage from './pages/PendingApprovalsPage';
 import PaymentCheckoutPage from './pages/PaymentCheckoutPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
@@ -38,12 +40,14 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><AppLayout><AccountPage /></AppLayout></ProtectedRoute>} />
         <Route path="/admin-panel" element={<ProtectedRoute><AppLayout><AccountPage /></AppLayout></ProtectedRoute>} />
         <Route path="/account" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/ticket-checker" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AppLayout><TicketCheckerPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/ticket-checker" element={<ProtectedRoute allowedRoles={["ADMIN", "TICKET CHECKER"]}><AppLayout><TicketCheckerPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/lawyers" element={<ProtectedRoute allowedRoles={["ADMIN", "TICKET CHECKER"]}><AppLayout><LawyerPage /></AppLayout></ProtectedRoute>} />
         <Route path="/supervisor" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AppLayout><SupervisorPage /></AppLayout></ProtectedRoute>} />
         <Route path="/agents" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR"]}><AppLayout><AgentPage /></AppLayout></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT"]}><AppLayout><CustomerPage /></AppLayout></ProtectedRoute>} />
         <Route path="/check-reservation" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT"]}><AppLayout><CheckReservationPage /></AppLayout></ProtectedRoute>} />
         <Route path="/reservation-management" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT"]}><AppLayout><ReservationManagementPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/pending-approvals" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT"]}><AppLayout><PendingApprovalsPage /></AppLayout></ProtectedRoute>} />
         <Route path="/change-password" element={<ProtectedRoute><AppLayout><ChangePasswordPage /></AppLayout></ProtectedRoute>} />
       </Routes>
     </Router>

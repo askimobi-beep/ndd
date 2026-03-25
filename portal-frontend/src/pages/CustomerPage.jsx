@@ -18,8 +18,12 @@ import { getAuthUser, hasAnyRole } from "../utils/auth";
 export default function CustomerPage() {
   const user = getAuthUser();
   const navigate = useNavigate();
+  const isAdmin = hasAnyRole(user?.role, ["ADMIN"]);
+  const isSupervisor = hasAnyRole(user?.role, ["SUPERVISOR"]);
   const canManageCustomers = hasAnyRole(user?.role, ["AGENT"]);
   const canViewCustomers = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
+  const canConfirmPayment = isAdmin;
+  const canViewBillingDetails = hasAnyRole(user?.role, ["ADMIN", "AGENT"]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notification, setNotification] = useState({ text: "", type: "success" });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,6 +47,10 @@ export default function CustomerPage() {
   });
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInvoiceLoading, setIsInvoiceLoading] = useState(false);
+  const [invoiceRows, setInvoiceRows] = useState([]);
+  const [billingCustomer, setBillingCustomer] = useState(null);
+  const [billingModalType, setBillingModalType] = useState("");
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState("ALL");
   const [dateFilter, setDateFilter] = useState("ALL");
@@ -57,6 +65,46 @@ export default function CustomerPage() {
     dot: "",
     state: "",
   });
+
+  const formatDateTime = (value) => {
+    if (!value) {
+      return "-";
+    }
+
+    return new Date(value).toLocaleString("en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  };
+
+  const getPaymentMethodLabel = (value) => {
+    if (value === "CREDIT_CARD") {
+      return "Credit Card";
+    }
+
+    if (value === "BANK_TRANSFER") {
+      return "Bank Transfer";
+    }
+
+    return "Not Set";
+  };
+
+  const getPaymentStatusLabel = (value) => {
+    if (value === "UNDER_REVIEW") {
+      return "Payment Under Review";
+    }
+
+    if (value === "PAID_APPROVED") {
+      return "Payment Confirmed";
+    }
+
+    return "Payment Pending";
+  };
 
   const generatePassword = () => {
     const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$";
@@ -244,6 +292,9 @@ export default function CustomerPage() {
             password: formData.password,
             phone: formData.phone,
             office: formData.office,
+            licenseNo: formData.licenseNo,
+            dot: formData.dot,
+            state: formData.state,
             customerPlan: "INDIVIDUAL",
           }),
         });
@@ -338,6 +389,55 @@ export default function CustomerPage() {
     }
   };
 
+  const confirmPayment = async (record) => {
+    try {
+      const data = await apiRequest(`/api/users/${record._id}/payment-confirmation`, {
+        method: "PATCH",
+      });
+
+      if (data.user) {
+        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
+      }
+
+      setNotification({ text: data.message || "Payment confirmed", type: "success" });
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to confirm payment", type: "error" });
+    }
+  };
+
+  const openPaymentMethodModal = (record) => {
+    setBillingCustomer(record);
+    setBillingModalType("PAYMENT_METHOD");
+  };
+
+  const openSubscriptionModal = (record) => {
+    setBillingCustomer(record);
+    setBillingModalType("SUBSCRIPTION");
+  };
+
+  const openInvoiceModal = async (record) => {
+    try {
+      setBillingCustomer(record);
+      setBillingModalType("INVOICE");
+      setIsInvoiceLoading(true);
+      const data = await apiRequest(`/api/users/${record._id}/invoices`);
+      setInvoiceRows(data.invoices || []);
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to load invoices", type: "error" });
+      setBillingCustomer(null);
+      setInvoiceRows([]);
+      setBillingModalType("");
+    } finally {
+      setIsInvoiceLoading(false);
+    }
+  };
+
+  const closeBillingModal = () => {
+    setBillingModalType("");
+    setBillingCustomer(null);
+    setInvoiceRows([]);
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-accent">
       <TopNavbar />
@@ -372,35 +472,39 @@ export default function CustomerPage() {
               <div className="flex flex-col gap-4">
                 <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Quick Actions</p>
                 <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={() => setQuickFilter((prev) => (prev === "PENDING" ? "ALL" : "PENDING"))}
-                    className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
-                      quickFilter === "PENDING"
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:bg-primary/5 hover:text-primary"
-                    }`}
-                  >
-                    <ExclamationCircleIcon className="h-4 w-4" />
-                    Pending Approvals ({pendingCount})
-                  </button>
-                  <button
-                    onClick={() => setQuickFilter((prev) => (prev === "CANCELLED" ? "ALL" : "CANCELLED"))}
-                    className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
-                      quickFilter === "CANCELLED"
-                        ? "border-rose-500 bg-rose-50 text-rose-700"
-                        : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:bg-primary/5 hover:text-primary"
-                    }`}
-                  >
-                    <XCircleIcon className="h-4 w-4" />
-                    Cancelled ({cancelledCount})
-                  </button>
-                  <button
-                    onClick={() => navigate("/reservation-management")}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-secondary"
-                  >
-                    <DocumentIcon className="h-4 w-4" />
-                    Reservation Management
-                  </button>
+                  {!isSupervisor && (
+                    <>
+                      <button
+                        onClick={() => navigate("/pending-approvals")}
+                        className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
+                          quickFilter === "PENDING"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:bg-primary/5 hover:text-primary"
+                        }`}
+                      >
+                        <ExclamationCircleIcon className="h-4 w-4" />
+                        Pending Approvals ({pendingCount})
+                      </button>
+                      <button
+                        onClick={() => setQuickFilter((prev) => (prev === "CANCELLED" ? "ALL" : "CANCELLED"))}
+                        className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
+                          quickFilter === "CANCELLED"
+                            ? "border-rose-500 bg-rose-50 text-rose-700"
+                            : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:bg-primary/5 hover:text-primary"
+                        }`}
+                      >
+                        <XCircleIcon className="h-4 w-4" />
+                        Cancelled ({cancelledCount})
+                      </button>
+                      <button
+                        onClick={() => navigate("/reservation-management")}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-secondary"
+                      >
+                        <DocumentIcon className="h-4 w-4" />
+                        Reservation Management
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => navigate("/check-reservation")}
                     className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
@@ -490,6 +594,8 @@ export default function CustomerPage() {
               <div className="mt-6 space-y-4">
                 {filteredRecords.map((record) => (
                   <div key={record._id} className="rounded-2xl border border-slate-200 p-6 hover:border-primary/50 transition">
+                    {(() => {
+                      return (
                     <div className="grid gap-6 lg:grid-cols-5">
                       {/* User Information */}
                       <div>
@@ -576,6 +682,12 @@ export default function CustomerPage() {
                             </span>
                           </div>
                           <div className="space-y-1">
+                            <p className="text-xs font-medium text-slate-600">Payment</p>
+                            <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${record.paymentStatus === "PAID_APPROVED" ? "bg-emerald-50 text-emerald-700" : record.paymentStatus === "UNDER_REVIEW" ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-700"}`}>
+                              {getPaymentStatusLabel(record.paymentStatus)}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
                             <p className="text-xs font-medium text-slate-600">Status</p>
                             <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${record.isActive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
                               {record.isActive ? "● ACTIVE" : "● INACTIVE"}
@@ -596,18 +708,43 @@ export default function CustomerPage() {
                           ⚙️ Actions
                         </p>
                         <div className="flex flex-col gap-1">
-                          <button className="rounded-lg bg-blue-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-blue-600">
-                            ✓ Subscription
-                          </button>
-                          <button className="rounded-lg bg-orange-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-orange-600">
-                            📋 Invoices
-                          </button>
+                          {canViewBillingDetails && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openPaymentMethodModal(record)}
+                                className="rounded-lg bg-purple-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-purple-600"
+                              >
+                                Payment Method
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openSubscriptionModal(record)}
+                                className="rounded-lg bg-blue-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-blue-600"
+                              >
+                                Subscription
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openInvoiceModal(record)}
+                                className="rounded-lg bg-orange-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-orange-600"
+                              >
+                                Invoices
+                              </button>
+                            </>
+                          )}
                           <button className="rounded-lg bg-green-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-green-600">
                             🎫 Tickets
                           </button>
-                          <button className="rounded-lg bg-purple-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-purple-600">
-                            💳 Payment Methods
-                          </button>
+                          {canConfirmPayment && record.paymentStatus === "UNDER_REVIEW" && (
+                            <button
+                              type="button"
+                              onClick={() => confirmPayment(record)}
+                              className="rounded-lg bg-emerald-600 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-emerald-700"
+                            >
+                              Confirm Payment
+                            </button>
+                          )}
                           <button onClick={() => openEditModal(record)} className="rounded-lg border border-slate-300 text-slate-700 px-2.5 py-1.5 text-xs font-semibold transition hover:border-primary hover:text-primary flex items-center justify-center gap-1">
                             <EllipsisHorizontalIcon className="h-4 w-4" />
                             More Actions
@@ -615,6 +752,8 @@ export default function CustomerPage() {
                         </div>
                       </div>
                     </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -721,6 +860,100 @@ export default function CustomerPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {Boolean(billingModalType) && billingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 px-4">
+          <div className="w-full max-w-4xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-semibold text-slate-900">
+                  {billingModalType === "PAYMENT_METHOD"
+                    ? "Payment Method"
+                    : billingModalType === "SUBSCRIPTION"
+                      ? "Subscription"
+                      : "Invoice History"}
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {`${billingCustomer.firstName || ""} ${billingCustomer.lastName || ""}`.trim()}
+                </p>
+              </div>
+              <button
+                onClick={closeBillingModal}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary"
+              >
+                Close
+              </button>
+            </div>
+
+            {billingModalType === "PAYMENT_METHOD" && (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Selected Method</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-900">{getPaymentMethodLabel(billingCustomer.paymentMethod)}</p>
+                <p className="mt-3 text-sm text-slate-600">Payment Status: {getPaymentStatusLabel(billingCustomer.paymentStatus)}</p>
+              </div>
+            )}
+
+            {billingModalType === "SUBSCRIPTION" && (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Subscription Timeline</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">Start</p>
+                    <p className="text-sm font-semibold text-slate-900">{formatDateTime(billingCustomer.subscriptionStartAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">End</p>
+                    <p className="text-sm font-semibold text-slate-900">{formatDateTime(billingCustomer.subscriptionEndAt)}</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm text-slate-600">
+                  {billingCustomer.subscriptionEndAt && new Date(billingCustomer.subscriptionEndAt).getTime() < Date.now()
+                    ? "Subscription expired"
+                    : "Subscription active"}
+                </p>
+              </div>
+            )}
+
+            {billingModalType === "INVOICE" && (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 px-4 py-3">
+                <h4 className="text-sm font-semibold text-slate-900">Invoices</h4>
+              </div>
+              <div className="max-h-[320px] overflow-auto">
+                {isInvoiceLoading ? (
+                  <p className="px-4 py-6 text-sm text-slate-500">Loading invoices...</p>
+                ) : invoiceRows.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-slate-500">No invoices found.</p>
+                ) : (
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-700">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Invoice</th>
+                        <th className="px-4 py-3 font-semibold">Status</th>
+                        <th className="px-4 py-3 font-semibold">Method</th>
+                        <th className="px-4 py-3 font-semibold">Issued</th>
+                        <th className="px-4 py-3 font-semibold">Paid</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoiceRows.map((row) => (
+                        <tr key={row.invoiceNumber} className="border-t border-slate-100">
+                          <td className="px-4 py-3 text-slate-700">{row.invoiceNumber}</td>
+                          <td className="px-4 py-3 text-slate-700">{row.status || "-"}</td>
+                          <td className="px-4 py-3 text-slate-700">{getPaymentMethodLabel(row.paymentMethod)}</td>
+                          <td className="px-4 py-3 text-slate-700">{formatDateTime(row.issuedAt)}</td>
+                          <td className="px-4 py-3 text-slate-700">{formatDateTime(row.paidAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+            )}
           </div>
         </div>
       )}
@@ -961,6 +1194,8 @@ export default function CustomerPage() {
           </div>
         </div>
       )}
+
+
     </div>
   );
 }

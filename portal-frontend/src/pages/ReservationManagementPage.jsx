@@ -9,6 +9,7 @@ import {
 } from "@heroicons/react/24/outline";
 import TopNavbar from "../components/TopNavbar";
 import { apiRequest } from "../utils/api";
+import { getAuthUser, hasAnyRole } from "../utils/auth";
 
 function daysSince(dateValue) {
   const createdAt = new Date(dateValue).getTime();
@@ -24,6 +25,9 @@ function formatDateTime(dateValue) {
 }
 
 export default function ReservationManagementPage() {
+  const user = getAuthUser();
+  const canConfirmPayment = hasAnyRole(user?.role, ["ADMIN"]);
+  const canClaimCustomers = hasAnyRole(user?.role, ["AGENT"]);
   const [records, setRecords] = useState([]);
   const [claimPoolRecords, setClaimPoolRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -92,6 +96,22 @@ export default function ReservationManagementPage() {
     }
   };
 
+  const handleConfirmPayment = async (record) => {
+    try {
+      setActionUserId(record._id);
+      const data = await apiRequest(`/api/users/${record._id}/payment-confirmation`, {
+        method: "PATCH",
+      });
+
+      setNotification({ text: data.message || "Payment confirmed successfully", type: "success" });
+      await loadCustomers();
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to confirm payment", type: "error" });
+    } finally {
+      setActionUserId("");
+    }
+  };
+
   const reservedCustomers = useMemo(() => {
     return records.filter((record) => {
       const ageInDays = daysSince(record.createdAt);
@@ -100,6 +120,7 @@ export default function ReservationManagementPage() {
         Boolean(record.isActive) &&
         !record.isApprovedByAdmin &&
         paymentStatus !== "UNDER_REVIEW" &&
+        paymentStatus !== "PAID_APPROVED" &&
         paymentStatus !== "PAID_PENDING_APPROVAL" &&
         ageInDays <= 7
       );
@@ -150,6 +171,22 @@ export default function ReservationManagementPage() {
       : activeTab === "UNDER_REVIEW"
         ? underReviewCustomers
         : claimableCustomers;
+
+    const handleClaimCustomer = async (record) => {
+      try {
+        setActionUserId(record._id);
+        const data = await apiRequest(`/api/users/${record._id}/claim`, {
+          method: "POST",
+        });
+
+        setNotification({ text: data.message || "Customer claimed successfully", type: "success" });
+        await loadCustomers();
+      } catch (error) {
+        setNotification({ text: error.message || "Unable to claim customer", type: "error" });
+      } finally {
+        setActionUserId("");
+      }
+    };
 
   return (
     <div className="flex flex-col min-h-screen bg-accent">
@@ -236,7 +273,9 @@ export default function ReservationManagementPage() {
                 Claim Available Customers
               </p>
               <p className="mt-1 text-xs">
-                These customers are available for claiming after payment timeout. You can claim up to your daily limit.
+                {canClaimCustomers
+                  ? "These customers are available for claiming after payment timeout. Claiming updates the customer agent assignment to you."
+                  : "These customers are visible for review. Only agents can claim them."}
               </p>
             </div>
           )}
@@ -360,15 +399,40 @@ export default function ReservationManagementPage() {
                       )}
 
                       {activeTab === "UNDER_REVIEW" && (
-                        <span className="rounded-xl bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700">
-                          Payment Under Review
-                        </span>
+                        <>
+                          <span className="rounded-xl bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                            Payment Under Review
+                          </span>
+                          {canConfirmPayment ? (
+                            <button
+                              onClick={() => handleConfirmPayment(record)}
+                              disabled={actionUserId === record._id}
+                              className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                              {actionUserId === record._id ? "Confirming..." : "Confirm Payment"}
+                            </button>
+                          ) : (
+                            <span className="rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                              View Only
+                            </span>
+                          )}
+                        </>
                       )}
 
-                      {activeTab === "CLAIM" && (
-                        <button className="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary">
-                          Claim Customer
+                      {activeTab === "CLAIM" && canClaimCustomers && (
+                        <button
+                          onClick={() => handleClaimCustomer(record)}
+                          disabled={actionUserId === record._id}
+                          className="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary disabled:opacity-60"
+                        >
+                          {actionUserId === record._id ? "Claiming..." : "Claim Customer"}
                         </button>
+                      )}
+
+                      {activeTab === "CLAIM" && !canClaimCustomers && (
+                        <span className="rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                          View Only
+                        </span>
                       )}
                     </div>
                   </div>

@@ -15,6 +15,7 @@ export default function PaymentCheckoutPage() {
   const [invoice, setInvoice] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("CREDIT_CARD");
 
   useEffect(() => {
     async function loadCheckout() {
@@ -47,6 +48,7 @@ export default function PaymentCheckoutPage() {
       setError("");
       const data = await apiRequest(`/api/users/payment-checkout/${token}/submit`, {
         method: "POST",
+        body: JSON.stringify({ paymentMethod }),
       });
 
       setSuccessMessage(data.message || "Payment submitted successfully");
@@ -148,21 +150,55 @@ export default function PaymentCheckoutPage() {
           </section>
 
           <section>
-            <h2 className="mb-2 text-sm font-semibold text-slate-800">Enter Card Details</h2>
-            <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
-              <span className="rounded bg-slate-100 px-2 py-1">VISA</span>
-              <span className="rounded bg-slate-100 px-2 py-1">MASTERCARD</span>
-              <span className="rounded bg-slate-100 px-2 py-1">AMEX</span>
-              <span className="rounded bg-slate-100 px-2 py-1">DISCOVER</span>
+            <h2 className="mb-2 text-sm font-semibold text-slate-800">Payment Method</h2>
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod("CREDIT_CARD")}
+                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                  paymentMethod === "CREDIT_CARD"
+                    ? "border-[#0b4c8c] bg-[#0b4c8c]/10 text-[#0b4c8c]"
+                    : "border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                Credit Card
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod("BANK_TRANSFER")}
+                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                  paymentMethod === "BANK_TRANSFER"
+                    ? "border-[#0b4c8c] bg-[#0b4c8c]/10 text-[#0b4c8c]"
+                    : "border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                Bank Transfer
+              </button>
             </div>
-            <input className="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none" placeholder="Cardholder's Name" />
-            <div className="rounded-2xl border border-slate-300 bg-white p-2">
-              <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Card number" />
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="MM/YY" />
-                <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="CVV" />
+
+            {paymentMethod === "CREDIT_CARD" ? (
+              <>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Enter Card Details</h3>
+                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
+                  <span className="rounded bg-slate-100 px-2 py-1">VISA</span>
+                  <span className="rounded bg-slate-100 px-2 py-1">MASTERCARD</span>
+                  <span className="rounded bg-slate-100 px-2 py-1">AMEX</span>
+                  <span className="rounded bg-slate-100 px-2 py-1">DISCOVER</span>
+                </div>
+                <input className="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none" placeholder="Cardholder's Name" />
+                <div className="rounded-2xl border border-slate-300 bg-white p-2">
+                  <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Card number" />
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="MM/YY" />
+                    <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="CVV" />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                Bank transfer selected. After clicking Pay, your payment moves to under review.
               </div>
-            </div>
+            )}
           </section>
 
           <button
