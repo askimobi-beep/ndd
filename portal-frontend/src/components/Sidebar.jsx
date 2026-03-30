@@ -5,6 +5,7 @@ import {
   Squares2X2Icon,
   ChevronDownIcon,
   ArrowRightOnRectangleIcon,
+  UserGroupIcon,
 } from "@heroicons/react/24/outline";
 import { clearAuthSession, formatRoleLabel, getAuthUser, hasAnyRole } from "../utils/auth";
 
@@ -13,15 +14,16 @@ export default function Sidebar() {
   const [dashboardOpen, setDashboardOpen] = useState(true);
   const navigate = useNavigate();
   const user = getAuthUser();
+  const isMemberUser = hasAnyRole(user?.role, ["CUSTOMER"]);
   const displayName = user?.fullName || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Admin User";
   const displayRole = formatRoleLabel(user?.role);
   const canViewTicketMakerPage = hasAnyRole(user?.role, ["ADMIN", "TICKET CHECKER"]);
   const canViewLawyerPage = hasAnyRole(user?.role, ["ADMIN", "TICKET CHECKER"]);
   const canViewSupervisorPage = hasAnyRole(user?.role, ["ADMIN"]);
   const canViewAgentPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR"]);
-  const canViewCustomerPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
+  const canViewMemberPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"]);
   const canViewPendingApprovalsPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
-  const canManageUsers = canViewTicketMakerPage || canViewLawyerPage || canViewSupervisorPage || canViewAgentPage || canViewCustomerPage || canViewPendingApprovalsPage;
+  const canManageUsers = canViewTicketMakerPage || canViewLawyerPage || canViewSupervisorPage || canViewAgentPage || canViewMemberPage || canViewPendingApprovalsPage;
   const linkBaseClass = "flex items-center gap-4 px-5 py-3 rounded-xl transition-all duration-300 cursor-pointer";
   const linkActiveClass = "bg-gradient-to-r from-secondary to-primary shadow-md";
   const linkIdleClass = "hover:bg-secondary/70";
@@ -64,6 +66,16 @@ export default function Sidebar() {
           <UserIcon className="h-6 w-6" />
           {open && <span>Profile</span>}
         </NavLink>
+
+        {isMemberUser && (
+          <NavLink
+            to="/member-dashboard"
+            className={({ isActive }) => `${linkBaseClass} ${isActive ? linkActiveClass : linkIdleClass}`}
+          >
+            <UserGroupIcon className="h-6 w-6" />
+            {open && <span>Member Dashboard</span>}
+          </NavLink>
+        )}
 
         {canManageUsers && (
           <div>
@@ -120,12 +132,12 @@ export default function Sidebar() {
                     Agents
                   </NavLink>
                 )}
-                {canViewCustomerPage && (
+                {canViewMemberPage && (
                   <NavLink
-                    to="/customers"
+                    to="/members"
                     className={({ isActive }) => `px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-secondary/80 shadow-sm' : 'hover:bg-secondary/60'}`}
                   >
-                    Customers
+                    Members
                   </NavLink>
                 )}
                 {canViewPendingApprovalsPage && (

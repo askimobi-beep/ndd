@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ExclamationCircleIcon,
   EnvelopeIcon,
@@ -11,26 +11,26 @@ import { getAuthUser, hasAnyRole } from "../utils/auth";
 
 export default function PendingApprovalsPage() {
   const user = getAuthUser();
-  const canApproveCustomers = hasAnyRole(user?.role, ["ADMIN"]);
+  const canApproveMembers = hasAnyRole(user?.role, ["ADMIN"]);
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState({ text: "", type: "success" });
 
-  const loadCustomers = useCallback(async () => {
+  const loadMembers = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await apiRequest("/api/users?role=CUSTOMER");
       setRecords(data.users || []);
     } catch (error) {
-      setNotification({ text: error.message || "Unable to load customers", type: "error" });
+      setNotification({ text: error.message || "Unable to load members", type: "error" });
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadCustomers();
-  }, [loadCustomers]);
+    loadMembers();
+  }, [loadMembers]);
 
   const formatDateTime = (value) => {
     if (!value) {
@@ -48,6 +48,10 @@ export default function PendingApprovalsPage() {
     });
   };
 
+  const formatMemberId = (position) => {
+    return `M-${String(position).padStart(2, "0")}`;
+  };
+
   const getPaymentStatusLabel = (value) => {
     if (value === "UNDER_REVIEW") {
       return "Payment Under Review";
@@ -60,12 +64,25 @@ export default function PendingApprovalsPage() {
     return "Payment Pending";
   };
 
-  const pendingCustomers = records.filter(
+  const pendingMembers = records.filter(
     (r) => r.requiresAdminApproval && !r.isApprovedByAdmin && r.paymentStatus === "PAID_APPROVED"
   );
 
+  const memberIdByUserId = useMemo(() => {
+    const sorted = [...records].sort((a, b) => {
+      const aTime = new Date(a.createdAt || 0).getTime();
+      const bTime = new Date(b.createdAt || 0).getTime();
+      return aTime - bTime;
+    });
+
+    return sorted.reduce((accumulator, record, index) => {
+      accumulator[record._id] = formatMemberId(index + 1);
+      return accumulator;
+    }, {});
+  }, [records]);
+
   const approveUser = async (record) => {
-    if (!canApproveCustomers) {
+    if (!canApproveMembers) {
       return;
     }
 
@@ -79,9 +96,9 @@ export default function PendingApprovalsPage() {
         setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
       }
 
-      setNotification({ text: data.message || "Customer approved successfully", type: "success" });
+      setNotification({ text: data.message || "Member approved successfully", type: "success" });
     } catch (error) {
-      setNotification({ text: error.message || "Unable to approve customer", type: "error" });
+      setNotification({ text: error.message || "Unable to approve member", type: "error" });
     }
   };
 
@@ -94,10 +111,10 @@ export default function PendingApprovalsPage() {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-3xl font-bold text-slate-900">Customer Approvals</h2>
-              <p className="text-sm text-slate-600 mt-1">All customers waiting for final admin approval</p>
+              <h2 className="text-3xl font-bold text-slate-900">Member Approvals</h2>
+              <p className="text-sm text-slate-600 mt-1">All members waiting for final admin approval</p>
             </div>
-            <a href="/customers" className="text-sm font-semibold text-primary hover:text-secondary transition">
+            <a href="/members" className="text-sm font-semibold text-primary hover:text-secondary transition">
               ← Back to Dashboard
             </a>
           </div>
@@ -105,27 +122,27 @@ export default function PendingApprovalsPage() {
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
             <div className="mb-4 inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary">
               <ExclamationCircleIcon className="h-4 w-4" />
-              Pending Approvals ({pendingCustomers.length})
+              Pending Approvals ({pendingMembers.length})
             </div>
 
             <div className="mt-2 space-y-4">
               {isLoading ? (
                 <p className="text-center text-slate-500 py-8">Loading...</p>
-              ) : pendingCustomers.length === 0 ? (
+              ) : pendingMembers.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-primary/20 bg-slate-50 p-8 text-center">
                   <ExclamationCircleIcon className="h-12 w-12 mx-auto text-primary/30 mb-3" />
                   <p className="text-slate-600">No pending approvals at this time</p>
                 </div>
               ) : (
-                pendingCustomers.map((record) => (
+                pendingMembers.map((record) => (
                   <div key={record._id} className="rounded-2xl border border-slate-200 p-6 hover:border-primary/50 transition">
                     <div className="grid gap-6 lg:grid-cols-5">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary mb-3">User Information</p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary mb-3">Member Information</p>
                           <div className="space-y-2">
                             <div>
                               <p className="text-sm font-semibold text-slate-900">{`${record.firstName || ""} ${record.lastName || ""}`.trim()}</p>
-                              <p className="text-xs text-slate-500">ID: M-{record._id.substring(0, 6).toUpperCase()}</p>
+                                <p className="text-xs text-slate-500">ID: {memberIdByUserId[record._id] || formatMemberId(1)}</p>
                             </div>
                             <div>
                               <span className="inline-block rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 text-xs font-semibold">{record.customerPlan || "INDIVIDUAL"}</span>
@@ -206,7 +223,7 @@ export default function PendingApprovalsPage() {
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 mb-3">Actions</p>
                           <div className="flex flex-col gap-2">
-                            {canApproveCustomers ? (
+                            {canApproveMembers ? (
                               <button
                                 onClick={() => approveUser(record)}
                                 className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"

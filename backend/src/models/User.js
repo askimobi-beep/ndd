@@ -46,6 +46,11 @@ const userSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    address: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     role: {
       type: String,
       enum: ["ADMIN", "SUPERVISOR", "TICKET CHECKER", "LAWYER", "AGENT", "CUSTOMER"],

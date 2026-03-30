@@ -24,10 +24,14 @@ function formatDateTime(dateValue) {
   });
 }
 
+function formatMemberId(position) {
+  return `M-${String(position).padStart(2, "0")}`;
+}
+
 export default function ReservationManagementPage() {
   const user = getAuthUser();
   const canConfirmPayment = hasAnyRole(user?.role, ["ADMIN"]);
-  const canClaimCustomers = hasAnyRole(user?.role, ["AGENT"]);
+  const canClaimMembers = hasAnyRole(user?.role, ["AGENT"]);
   const [records, setRecords] = useState([]);
   const [claimPoolRecords, setClaimPoolRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -35,7 +39,7 @@ export default function ReservationManagementPage() {
   const [notification, setNotification] = useState({ text: "", type: "success" });
   const [actionUserId, setActionUserId] = useState("");
 
-  const loadCustomers = useCallback(async () => {
+  const loadMembers = useCallback(async () => {
     try {
       setIsLoading(true);
       const [ownData, claimData] = await Promise.all([
@@ -46,15 +50,15 @@ export default function ReservationManagementPage() {
       setRecords(ownData.users || []);
       setClaimPoolRecords(claimData.users || []);
     } catch (error) {
-      setNotification({ text: error.message || "Unable to load customers", type: "error" });
+      setNotification({ text: error.message || "Unable to load members", type: "error" });
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadCustomers();
-  }, [loadCustomers]);
+    loadMembers();
+  }, [loadMembers]);
 
   const handleGetPaymentLink = async (record) => {
     try {
@@ -88,7 +92,7 @@ export default function ReservationManagementPage() {
       const data = await apiRequest(`/api/users/${record._id}/payment-link/email`, {
         method: "POST",
       });
-      setNotification({ text: data.message || "Invoice sent to customer email", type: "success" });
+      setNotification({ text: data.message || "Invoice sent to member email", type: "success" });
     } catch (error) {
       setNotification({ text: error.message || "Unable to send invoice email", type: "error" });
     } finally {
@@ -104,7 +108,7 @@ export default function ReservationManagementPage() {
       });
 
       setNotification({ text: data.message || "Payment confirmed successfully", type: "success" });
-      await loadCustomers();
+      await loadMembers();
     } catch (error) {
       setNotification({ text: error.message || "Unable to confirm payment", type: "error" });
     } finally {
@@ -112,7 +116,7 @@ export default function ReservationManagementPage() {
     }
   };
 
-  const reservedCustomers = useMemo(() => {
+  const reservedMembers = useMemo(() => {
     return records.filter((record) => {
       const ageInDays = daysSince(record.createdAt);
       const paymentStatus = String(record?.paymentStatus || record?.paymentStage || "").trim().toUpperCase();
@@ -127,7 +131,7 @@ export default function ReservationManagementPage() {
     });
   }, [records]);
 
-  const isUnderReviewCustomer = useCallback((record) => {
+  const isUnderReviewMember = useCallback((record) => {
     const paymentStatus = String(record?.paymentStatus || record?.paymentStage || "")
       .trim()
       .toUpperCase();
@@ -135,54 +139,75 @@ export default function ReservationManagementPage() {
     return paymentStatus === "UNDER_REVIEW" || paymentStatus === "PAID_PENDING_APPROVAL";
   }, []);
 
-  const underReviewCustomers = useMemo(() => {
+  const underReviewMembers = useMemo(() => {
     return records.filter((record) => {
       return (
         Boolean(record.isActive) &&
         !record.isApprovedByAdmin &&
         record.requiresAdminApproval &&
-        isUnderReviewCustomer(record)
+        isUnderReviewMember(record)
       );
     });
-  }, [isUnderReviewCustomer, records]);
+  }, [isUnderReviewMember, records]);
 
-  const claimableCustomers = useMemo(() => {
+  const claimableMembers = useMemo(() => {
     return claimPoolRecords.filter((record) => {
       const ageInDays = daysSince(record.createdAt);
       return (
         Boolean(record.isActive) &&
         !record.isApprovedByAdmin &&
-        !isUnderReviewCustomer(record) &&
+        !isUnderReviewMember(record) &&
         ageInDays > 7
       );
     });
-  }, [claimPoolRecords, isUnderReviewCustomer]);
+  }, [claimPoolRecords, isUnderReviewMember]);
+
+  const memberIdByUserId = useMemo(() => {
+    const combinedMap = new Map();
+
+    [...records, ...claimPoolRecords].forEach((record) => {
+      if (!combinedMap.has(record._id)) {
+        combinedMap.set(record._id, record);
+      }
+    });
+
+    const sorted = Array.from(combinedMap.values()).sort((a, b) => {
+      const aTime = new Date(a.createdAt || 0).getTime();
+      const bTime = new Date(b.createdAt || 0).getTime();
+      return aTime - bTime;
+    });
+
+    return sorted.reduce((accumulator, record, index) => {
+      accumulator[record._id] = formatMemberId(index + 1);
+      return accumulator;
+    }, {});
+  }, [claimPoolRecords, records]);
 
   const expiringSoonCount = useMemo(() => {
-    return reservedCustomers.filter((record) => {
+    return reservedMembers.filter((record) => {
       const ageInDays = daysSince(record.createdAt);
       return ageInDays >= 4 && ageInDays <= 7;
     }).length;
-  }, [reservedCustomers]);
+  }, [reservedMembers]);
 
   const currentList =
     activeTab === "RESERVED"
-      ? reservedCustomers
+      ? reservedMembers
       : activeTab === "UNDER_REVIEW"
-        ? underReviewCustomers
-        : claimableCustomers;
+        ? underReviewMembers
+        : claimableMembers;
 
-    const handleClaimCustomer = async (record) => {
+    const handleClaimMember = async (record) => {
       try {
         setActionUserId(record._id);
         const data = await apiRequest(`/api/users/${record._id}/claim`, {
           method: "POST",
         });
 
-        setNotification({ text: data.message || "Customer claimed successfully", type: "success" });
-        await loadCustomers();
+        setNotification({ text: data.message || "Member claimed successfully", type: "success" });
+        await loadMembers();
       } catch (error) {
-        setNotification({ text: error.message || "Unable to claim customer", type: "error" });
+        setNotification({ text: error.message || "Unable to claim member", type: "error" });
       } finally {
         setActionUserId("");
       }
@@ -198,9 +223,9 @@ export default function ReservationManagementPage() {
             <div className="flex items-start justify-between">
             <div>
                 <h2 className="text-2xl font-semibold tracking-tight">Reserved | Reviewed | Claimed</h2>
-                <p className="mt-1 text-sm text-blue-100">Manage reservations, reviews, and customer claims</p>
+                <p className="mt-1 text-sm text-blue-100">Manage reservations, reviews, and member claims</p>
             </div>
-              <a href="/customers" className="rounded-xl border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/20">
+              <a href="/members" className="rounded-xl border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/20">
                 × Back to Dashboard
             </a>
             </div>
@@ -216,7 +241,7 @@ export default function ReservationManagementPage() {
                     : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
               }`}
             >
-              Reserved Customers ({reservedCustomers.length})
+              Reserved Members ({reservedMembers.length})
             </button>
             <button
               onClick={() => setActiveTab("UNDER_REVIEW")}
@@ -226,7 +251,7 @@ export default function ReservationManagementPage() {
                     : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
               }`}
             >
-              Payments Under Review ({underReviewCustomers.length})
+              Payments Under Review ({underReviewMembers.length})
             </button>
             <button
               onClick={() => setActiveTab("CLAIM")}
@@ -236,7 +261,7 @@ export default function ReservationManagementPage() {
                     : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
               }`}
             >
-              Available Customers for Claim ({claimableCustomers.length})
+              Available Members for Claim ({claimableMembers.length})
             </button>
             </div>
           </div>
@@ -248,7 +273,7 @@ export default function ReservationManagementPage() {
                 Payment Reminder
               </p>
               <p className="mt-1 text-xs">
-                Complete payment before expiry to secure your reserved customers. After expiry, all reserved customers
+                Complete payment before expiry to secure your reserved members. After expiry, all reserved members
                 move to the claim pool.
               </p>
             </div>
@@ -261,7 +286,7 @@ export default function ReservationManagementPage() {
                 Under Review
               </p>
               <p className="mt-1 text-xs">
-                These customers have completed payment and are awaiting billing verification and admin approval.
+                These members have completed payment and are awaiting billing verification and admin approval.
               </p>
             </div>
           )}
@@ -270,12 +295,12 @@ export default function ReservationManagementPage() {
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-blue-900">
               <p className="text-sm font-semibold inline-flex items-center gap-2">
                 <LinkIcon className="h-4 w-4" />
-                Claim Available Customers
+                Claim Available Members
               </p>
               <p className="mt-1 text-xs">
-                {canClaimCustomers
-                  ? "These customers are available for claiming after payment timeout. Claiming updates the customer agent assignment to you."
-                  : "These customers are visible for review. Only agents can claim them."}
+                {canClaimMembers
+                  ? "These members are available for claiming after payment timeout. Claiming updates the member-agent assignment to you."
+                  : "These members are visible for review. Only agents can claim them."}
               </p>
             </div>
           )}
@@ -303,7 +328,7 @@ export default function ReservationManagementPage() {
             {isLoading && <p className="text-lg text-slate-500">Loading...</p>}
             {!isLoading && currentList.length === 0 && (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-                No customers in this section right now.
+                No members in this section right now.
               </div>
             )}
 
@@ -325,7 +350,7 @@ export default function ReservationManagementPage() {
                             {record.firstName} {record.lastName}
                             <span className="ml-2 rounded-md bg-emerald-500 px-1.5 py-0.5 text-[10px] text-white">LHR</span>
                           </p>
-                          <p className="text-xs text-slate-600">ID: M-{String(record._id || "").slice(-4)}</p>
+                          <p className="text-xs text-slate-600">ID: {memberIdByUserId[record._id] || formatMemberId(1)}</p>
                           <p className="text-xs text-slate-600">
                             Agent: {record.createdBy?.firstName || ""} {record.createdBy?.lastName || ""}
                           </p>
@@ -419,17 +444,17 @@ export default function ReservationManagementPage() {
                         </>
                       )}
 
-                      {activeTab === "CLAIM" && canClaimCustomers && (
+                      {activeTab === "CLAIM" && canClaimMembers && (
                         <button
-                          onClick={() => handleClaimCustomer(record)}
+                          onClick={() => handleClaimMember(record)}
                           disabled={actionUserId === record._id}
                           className="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary disabled:opacity-60"
                         >
-                          {actionUserId === record._id ? "Claiming..." : "Claim Customer"}
+                          {actionUserId === record._id ? "Claiming..." : "Claim Member"}
                         </button>
                       )}
 
-                      {activeTab === "CLAIM" && !canClaimCustomers && (
+                      {activeTab === "CLAIM" && !canClaimMembers && (
                         <span className="rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
                           View Only
                         </span>

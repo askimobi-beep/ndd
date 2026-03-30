@@ -133,7 +133,7 @@ export async function getMe(req, res) {
 
 export async function updateMe(req, res, next) {
   try {
-    const { firstName, lastName, phone, office } = req.body;
+    const { firstName, lastName, phone, office, address } = req.body;
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -155,6 +155,10 @@ export async function updateMe(req, res, next) {
 
     if (typeof office !== "undefined") {
       user.office = String(office).trim();
+    }
+
+    if (typeof address !== "undefined") {
+      user.address = String(address).trim();
     }
 
     await user.save();

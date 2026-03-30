@@ -13,6 +13,7 @@ import {
   getCustomerInvoices,
   getPaymentCheckoutDetails,
   submitPaymentCheckout,
+  cancelCustomerSubscription,
   getUserById,
   listUsers,
   sendCustomerPaymentInvoiceEmail,
@@ -46,6 +47,7 @@ router.route("/:id").get(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET 
 router.route("/:id/status").patch(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"), updateUserStatus);
 router.route("/:id/approval").patch(authorizeRoles("ADMIN"), updateUserApproval);
 router.route("/:id/payment-confirmation").patch(authorizeRoles("ADMIN"), confirmCustomerPayment);
-router.route("/:id/invoices").get(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), getCustomerInvoices);
+router.route("/:id/invoices").get(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"), getCustomerInvoices);
+router.route("/:id/cancel-subscription").patch(authorizeRoles("ADMIN"), cancelCustomerSubscription);
 
 export default router;

@@ -21,6 +21,7 @@ export default function AccountPage() {
     lastName: "",
     phone: "",
     office: "",
+    address: "",
   });
 
   useEffect(() => {
@@ -45,12 +46,15 @@ export default function AccountPage() {
     return user.fullName || `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User";
   }, [user]);
 
+  const isMemberUser = useMemo(() => formatRoleLabel(user?.role).toUpperCase() === "Customer".toUpperCase(), [user?.role]);
+
   const openEditModal = () => {
     setFormData({
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
       phone: user?.phone || "",
       office: user?.office || "",
+      address: user?.address || "",
     });
     setNotification({ text: "", type: "success" });
     setIsEditOpen(true);
@@ -102,9 +106,9 @@ export default function AccountPage() {
           <div className="rounded-[28px] bg-gradient-to-r from-primary via-secondary to-[#1e3a8a] p-5 text-white shadow-[0_16px_40px_rgba(0,87,231,0.20)]">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="text-2xl font-semibold lg:text-3xl">Account Overview</h2>
+                <h2 className="text-2xl font-semibold lg:text-3xl">{isMemberUser ? "Member Profile" : "Account Overview"}</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100">
-                  Review profile details and account access.
+                  {isMemberUser ? "Review all of your member details and account information." : "Review profile details and account access."}
                 </p>
               </div>
 
@@ -230,6 +234,70 @@ export default function AccountPage() {
                     />
                   </div>
                 </div>
+                {isMemberUser && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">Address</label>
+                      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <EnvelopeIcon className="h-5 w-5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={user?.address || ""}
+                          readOnly
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-form-type="other"
+                          className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">License No</label>
+                      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <UserIcon className="h-5 w-5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={user?.licenseNo || ""}
+                          readOnly
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-form-type="other"
+                          className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">DOT No</label>
+                      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <UserIcon className="h-5 w-5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={user?.dot || ""}
+                          readOnly
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-form-type="other"
+                          className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">State</label>
+                      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <UserIcon className="h-5 w-5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={user?.state || ""}
+                          readOnly
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-form-type="other"
+                          className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
@@ -314,6 +382,17 @@ export default function AccountPage() {
                   type="text"
                   name="office"
                   value={formData.office}
+                  onChange={handleFormChange}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Address</span>
+                <input
+                  type="text"
+                  name="address"
+                  value={formData.address}
                   onChange={handleFormChange}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
                 />

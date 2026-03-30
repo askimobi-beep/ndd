@@ -11,7 +11,7 @@ export default function PaymentCheckoutPage() {
   const { token } = useParams();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [customer, setCustomer] = useState(null);
+  const [member, setMember] = useState(null);
   const [invoice, setInvoice] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -23,7 +23,7 @@ export default function PaymentCheckoutPage() {
         setIsLoading(true);
         setError("");
         const data = await apiRequest(`/api/users/payment-checkout/${token}`);
-        setCustomer(data.customer || null);
+        setMember(data.customer || null);
         setInvoice(data.invoice || null);
       } catch (loadError) {
         setError(loadError.message || "Unable to load payment details");
@@ -36,11 +36,11 @@ export default function PaymentCheckoutPage() {
   }, [token]);
 
   const fullName = useMemo(() => {
-    if (!customer) {
+    if (!member) {
       return "";
     }
-    return `${customer.firstName || ""} ${customer.lastName || ""}`.trim();
-  }, [customer]);
+    return `${member.firstName || ""} ${member.lastName || ""}`.trim();
+  }, [member]);
 
   const handleSubmitPayment = async () => {
     try {
@@ -52,7 +52,7 @@ export default function PaymentCheckoutPage() {
       });
 
       setSuccessMessage(data.message || "Payment submitted successfully");
-      setCustomer((prev) =>
+      setMember((prev) =>
         prev
           ? {
               ...prev,
@@ -75,7 +75,7 @@ export default function PaymentCheckoutPage() {
     );
   }
 
-  if (error || !customer || !invoice) {
+  if (error || !member || !invoice) {
     return (
       <div className="min-h-screen bg-[#f6f7fb] flex items-center justify-center px-4">
         <div className="w-full max-w-md rounded-xl border border-red-200 bg-white p-5 text-center">
@@ -141,11 +141,11 @@ export default function PaymentCheckoutPage() {
           </section>
 
           <section className="rounded-2xl border border-slate-100 bg-[#f9fafc] p-3">
-            <h2 className="mb-2 text-sm font-semibold text-slate-800">Customer Information</h2>
+            <h2 className="mb-2 text-sm font-semibold text-slate-800">Member Information</h2>
             <div className="space-y-1 text-sm">
               <div className="flex items-center justify-between"><span className="text-slate-500">Name</span><span className="font-semibold text-slate-800">{fullName}</span></div>
-              <div className="flex items-center justify-between"><span className="text-slate-500">Email</span><span className="font-semibold text-slate-800">{customer.email || "-"}</span></div>
-              <div className="flex items-center justify-between"><span className="text-slate-500">Phone</span><span className="font-semibold text-slate-800">{customer.phone || "-"}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-500">Email</span><span className="font-semibold text-slate-800">{member.email || "-"}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-500">Phone</span><span className="font-semibold text-slate-800">{member.phone || "-"}</span></div>
             </div>
           </section>
 
@@ -204,10 +204,10 @@ export default function PaymentCheckoutPage() {
           <button
             type="button"
             onClick={handleSubmitPayment}
-            disabled={isSubmitting || customer?.paymentStatus === "UNDER_REVIEW"}
+            disabled={isSubmitting || member?.paymentStatus === "UNDER_REVIEW"}
             className="w-full rounded-xl bg-[#0b4c8c] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#094276] disabled:cursor-not-allowed disabled:opacity-65"
           >
-            {customer?.paymentStatus === "UNDER_REVIEW"
+            {member?.paymentStatus === "UNDER_REVIEW"
               ? "Submitted - Under Review"
               : isSubmitting
                 ? "Submitting..."

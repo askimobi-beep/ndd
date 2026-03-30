@@ -8,7 +8,8 @@ import TicketCheckerPage from './pages/TicketCheckerPage';
 import LawyerPage from './pages/LawyerPage';
 import SupervisorPage from './pages/SupervisorPage';
 import AgentPage from './pages/AgentPage';
-import CustomerPage from './pages/CustomerPage';
+import MemberPage from './pages/CustomerPage';
+import MemberProfilePage from './pages/MemberProfilePage';
 import CheckReservationPage from './pages/CheckReservationPage';
 import ReservationManagementPage from './pages/ReservationManagementPage';
 import PendingApprovalsPage from './pages/PendingApprovalsPage';
@@ -44,7 +45,10 @@ function App() {
         <Route path="/lawyers" element={<ProtectedRoute allowedRoles={["ADMIN", "TICKET CHECKER"]}><AppLayout><LawyerPage /></AppLayout></ProtectedRoute>} />
         <Route path="/supervisor" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AppLayout><SupervisorPage /></AppLayout></ProtectedRoute>} />
         <Route path="/agents" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR"]}><AppLayout><AgentPage /></AppLayout></ProtectedRoute>} />
-        <Route path="/customers" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT"]}><AppLayout><CustomerPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/members" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"]}><AppLayout><MemberPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/member-dashboard" element={<ProtectedRoute allowedRoles={["CUSTOMER"]}><AppLayout><MemberProfilePage /></AppLayout></ProtectedRoute>} />
+        <Route path="/member-profile/:id" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"]}><AppLayout><MemberProfilePage /></AppLayout></ProtectedRoute>} />
+        <Route path="/customers" element={<Navigate to="/members" replace />} />
         <Route path="/check-reservation" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT"]}><AppLayout><CheckReservationPage /></AppLayout></ProtectedRoute>} />
         <Route path="/reservation-management" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT"]}><AppLayout><ReservationManagementPage /></AppLayout></ProtectedRoute>} />
         <Route path="/pending-approvals" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT"]}><AppLayout><PendingApprovalsPage /></AppLayout></ProtectedRoute>} />
