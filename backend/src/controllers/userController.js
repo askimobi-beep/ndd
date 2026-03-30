@@ -1030,7 +1030,7 @@ export async function getPaymentCheckoutDetails(req, res, next) {
     }
 
     const customer = await User.findById(payload.customerId).select(
-      "firstName lastName email phone office createdAt paymentStatus paymentMethod paymentSubmittedAt subscriptionStartAt subscriptionEndAt invoices"
+      "firstName lastName email phone office createdAt customerPlan paymentStatus paymentMethod paymentSubmittedAt subscriptionStartAt subscriptionEndAt invoices"
     );
 
     if (!customer) {
