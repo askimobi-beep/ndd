@@ -2,9 +2,11 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { sendEmail } from "../utils/sendEmail.js";
 
-const PLAN_PRICE = 49.99;
-const PROCESSING_FEE = 1.85;
-const TOTAL_AMOUNT = Number((PLAN_PRICE + PROCESSING_FEE).toFixed(2));
+const PLAN_PRICES = {
+  INDIVIDUAL: 54.99,
+  FLEET: 44.99,
+};
+const PROCESSING_FEE = 0;
 
 const CREATABLE_ROLES = {
   ADMIN: ["SUPERVISOR", "TICKET CHECKER", "LAWYER", "CUSTOMER"],
@@ -15,7 +17,7 @@ const CREATABLE_ROLES = {
 
 const VIEWABLE_ROLES = {
   ADMIN: ["SUPERVISOR", "TICKET CHECKER", "LAWYER", "AGENT", "CUSTOMER"],
-  "TICKET CHECKER": ["LAWYER"],
+  "TICKET CHECKER": ["LAWYER", "CUSTOMER"],
   SUPERVISOR: ["AGENT", "CUSTOMER"],
   AGENT: ["CUSTOMER"],
 };
@@ -26,6 +28,26 @@ function normalizeEmail(email = "") {
 
 function normalizeRole(role = "") {
   return String(role).trim().toUpperCase();
+}
+
+function normalizeCustomerPlan(plan = "INDIVIDUAL") {
+  return normalizeRole(plan) === "FLEET" ? "FLEET" : "INDIVIDUAL";
+}
+
+function getPlanPrice(plan = "INDIVIDUAL") {
+  return PLAN_PRICES[normalizeCustomerPlan(plan)];
+}
+
+function getPlanAmountSummary(plan = "INDIVIDUAL") {
+  const planPrice = getPlanPrice(plan);
+  const processingFee = PROCESSING_FEE;
+  const totalAmount = Number((planPrice + processingFee).toFixed(2));
+
+  return {
+    planPrice,
+    processingFee,
+    totalAmount,
+  };
 }
 
 function getReferenceId(value) {
@@ -116,7 +138,7 @@ function canAccessUserRecord(req, user, { forWrite = false } = {}) {
   }
 
   if (actorRole === "TICKET CHECKER") {
-    return recordRole === "LAWYER";
+    return recordRole === "LAWYER" || recordRole === "CUSTOMER";
   }
 
   return false;
@@ -189,6 +211,10 @@ function buildScopedFilter(req, role) {
       return { role: "LAWYER" };
     }
 
+    if (targetRole === "CUSTOMER") {
+      return { role: "CUSTOMER" };
+    }
+
     return null;
   }
 
@@ -246,11 +272,16 @@ function buildUserPayload(body, forcedRole) {
     licenseNo: String(body.licenseNo || "").trim(),
     dot: String(body.dot || "").trim(),
     state: String(body.state || "").trim(),
+    address: String(body.address || "").trim(),
   };
 }
 
 function getCustomerPlanName(plan = "INDIVIDUAL") {
-  return normalizeRole(plan) === "FLEET" ? "Fleet Plan" : "Individual Plan";
+  return normalizeCustomerPlan(plan) === "FLEET" ? "Fleet Plan" : "Individual Plan";
+}
+
+function getCustomerPlanLabel(plan = "INDIVIDUAL") {
+  return normalizeCustomerPlan(plan) === "FLEET" ? "Fleet Protection Plan" : "Individual Protection Plan";
 }
 
 function buildCustomerOnboardingEmail({ customer, password, createdByRole }) {
@@ -260,6 +291,7 @@ function buildCustomerOnboardingEmail({ customer, password, createdByRole }) {
     .replace(/\/+$/, "");
   const loginUrl = `${frontendBase}/`;
   const planName = getCustomerPlanName(customer.customerPlan);
+  const planSummary = getPlanAmountSummary(customer.customerPlan);
   const fullName = `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || "Customer";
   const creatorLabel = normalizeRole(createdByRole) === "AGENT" ? "agent" : "team";
 
@@ -270,8 +302,8 @@ function buildCustomerOnboardingEmail({ customer, password, createdByRole }) {
       "",
       `Thank you for joining NDD through our ${creatorLabel}.`,
       `Plan: ${planName}`,
-      `Plan price: $${PLAN_PRICE.toFixed(2)}`,
-      `Total due now: $${TOTAL_AMOUNT.toFixed(2)}`,
+      `Plan price: $${planSummary.planPrice.toFixed(2)}`,
+      `Total due now: $${planSummary.totalAmount.toFixed(2)}`,
       "",
       "Your login credentials:",
       `Email: ${customer.email}`,
@@ -289,8 +321,8 @@ function buildCustomerOnboardingEmail({ customer, password, createdByRole }) {
           <div style="border:1px solid #dbeafe;background:#eff6ff;border-radius:12px;padding:16px;margin-bottom:16px;">
             <p style="margin:0 0 8px;font-weight:700;">Plan Details</p>
             <p style="margin:4px 0;">Plan: <strong>${planName}</strong></p>
-            <p style="margin:4px 0;">Plan price: <strong>$${PLAN_PRICE.toFixed(2)}</strong></p>
-            <p style="margin:4px 0;">Total due now: <strong>$${TOTAL_AMOUNT.toFixed(2)}</strong></p>
+            <p style="margin:4px 0;">Plan price: <strong>$${planSummary.planPrice.toFixed(2)}</strong></p>
+            <p style="margin:4px 0;">Total due now: <strong>$${planSummary.totalAmount.toFixed(2)}</strong></p>
           </div>
           <div style="border:1px solid #e2e8f0;background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px;">
             <p style="margin:0 0 8px;font-weight:700;">Login Credentials</p>
@@ -563,7 +595,7 @@ export async function getUserById(req, res, next) {
 
 export async function updateUser(req, res, next) {
   try {
-    const { firstName, lastName, email, phone, office, licenseNo, dot, state } = req.body;
+    const { firstName, lastName, email, phone, office, licenseNo, dot, state, address } = req.body;
     const user = await User.findById(req.params.id);
 
     if (!user) {
@@ -607,6 +639,10 @@ export async function updateUser(req, res, next) {
 
     if (typeof state !== "undefined") {
       user.state = String(state).trim();
+    }
+
+    if (typeof address !== "undefined") {
+      user.address = String(address).trim();
     }
 
     if (typeof email !== "undefined") {
@@ -831,14 +867,16 @@ function getLatestOpenInvoice(customer) {
 
 function ensureCurrentInvoice(customer) {
   const existing = getLatestOpenInvoice(customer);
+  const planSummary = getPlanAmountSummary(customer?.customerPlan);
 
   if (existing) {
+    existing.amount = planSummary.totalAmount;
     return existing;
   }
 
   customer.invoices.push({
     invoiceNumber: createInvoiceNumber(customer._id),
-    amount: TOTAL_AMOUNT,
+    amount: planSummary.totalAmount,
     status: "UNPAID",
     paymentMethod: "NONE",
     issuedAt: new Date(),
@@ -859,6 +897,8 @@ function normalizePaymentMethod(value = "") {
 
 function buildInvoiceHtml({ customer, paymentUrl }) {
   const fullName = `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || "Customer";
+  const planLabel = getCustomerPlanLabel(customer?.customerPlan);
+  const planSummary = getPlanAmountSummary(customer?.customerPlan);
   const frontendBase = String(process.env.FRONTEND_URL || "http://localhost:3000")
     .split(",")[0]
     .trim()
@@ -882,15 +922,15 @@ function buildInvoiceHtml({ customer, paymentUrl }) {
 
     <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
       <div style="font-size:12px;color:#64748b;">Order for ${fullName}</div>
-      <div style="font-size:26px;font-weight:700;margin-top:4px;">Individual Protection Plan</div>
+      <div style="font-size:26px;font-weight:700;margin-top:4px;">${planLabel}</div>
       <div style="font-size:13px;color:#475569;margin-top:4px;">Full coverage protection with 24/7 support for USA</div>
 
       <div style="margin-top:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;">
         <table style="width:100%;font-size:14px;color:#0f172a;border-collapse:collapse;">
-          <tr><td style="padding:4px 0;">Plan Price</td><td style="padding:4px 0;text-align:right;font-weight:600;">$${PLAN_PRICE.toFixed(2)}</td></tr>
-          <tr><td style="padding:4px 0;">Processing Fee</td><td style="padding:4px 0;text-align:right;font-weight:600;">$${PROCESSING_FEE.toFixed(2)}</td></tr>
+          <tr><td style="padding:4px 0;">Plan Price</td><td style="padding:4px 0;text-align:right;font-weight:600;">$${planSummary.planPrice.toFixed(2)}</td></tr>
+          <tr><td style="padding:4px 0;">Processing Fee</td><td style="padding:4px 0;text-align:right;font-weight:600;">$${planSummary.processingFee.toFixed(2)}</td></tr>
           <tr><td colspan="2" style="border-top:1px solid #e2e8f0;padding-top:8px;"></td></tr>
-          <tr><td style="font-weight:700;">Total Amount</td><td style="text-align:right;font-weight:800;font-size:20px;color:#0b4c8c;">$${TOTAL_AMOUNT.toFixed(2)}</td></tr>
+          <tr><td style="font-weight:700;">Total Amount</td><td style="text-align:right;font-weight:800;font-size:20px;color:#0b4c8c;">$${planSummary.totalAmount.toFixed(2)}</td></tr>
         </table>
       </div>
 
@@ -904,7 +944,7 @@ function buildInvoiceHtml({ customer, paymentUrl }) {
       </div>
 
       <div style="margin-top:16px;">
-        <a href="${paymentUrl}" style="display:inline-block;background:#0b4c8c;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:700;">Pay $${TOTAL_AMOUNT.toFixed(2)}</a>
+        <a href="${paymentUrl}" style="display:inline-block;background:#0b4c8c;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:700;">Pay $${planSummary.totalAmount.toFixed(2)}</a>
       </div>
     </div>
   </div>
@@ -927,6 +967,7 @@ export async function generateCustomerPaymentLink(req, res, next) {
 
     ensureCurrentInvoice(customer);
     await customer.save();
+    const planSummary = getPlanAmountSummary(customer.customerPlan);
 
     const token = createPaymentToken(customer._id);
     const paymentUrl = `${getFrontendBaseUrl(req)}/payment/${token}`;
@@ -934,7 +975,7 @@ export async function generateCustomerPaymentLink(req, res, next) {
     return res.json({
       message: "Payment link generated",
       paymentUrl,
-      amount: TOTAL_AMOUNT,
+      amount: planSummary.totalAmount,
     });
   } catch (error) {
     return next(error);
@@ -960,10 +1001,11 @@ export async function sendCustomerPaymentInvoiceEmail(req, res, next) {
     const token = createPaymentToken(customer._id);
     const paymentUrl = `${getFrontendBaseUrl(req)}/payment/${token}`;
     const html = buildInvoiceHtml({ customer, paymentUrl });
+    const planLabel = getCustomerPlanLabel(customer.customerPlan);
 
     await sendEmail({
       to: customer.email,
-      subject: "NDD Payment Invoice - Individual Protection Plan",
+      subject: `NDD Payment Invoice - ${planLabel}`,
       text: `Please complete your payment using this secure link: ${paymentUrl}`,
       html,
     });
@@ -996,6 +1038,8 @@ export async function getPaymentCheckoutDetails(req, res, next) {
       throw new Error("Customer not found");
     }
 
+    const planSummary = getPlanAmountSummary(customer.customerPlan);
+
     const latestInvoice = getLatestOpenInvoice(customer) || [...(customer.invoices || [])].reverse()[0] || null;
 
     return res.json({
@@ -1003,10 +1047,10 @@ export async function getPaymentCheckoutDetails(req, res, next) {
       invoice: {
         invoiceNumber: latestInvoice?.invoiceNumber || "",
         status: latestInvoice?.status || "UNPAID",
-        planName: "Individual Protection Plan",
-        planPrice: PLAN_PRICE,
-        processingFee: PROCESSING_FEE,
-        totalAmount: TOTAL_AMOUNT,
+        planName: getCustomerPlanLabel(customer.customerPlan),
+        planPrice: planSummary.planPrice,
+        processingFee: planSummary.processingFee,
+        totalAmount: planSummary.totalAmount,
         billingCycle: "monthly",
       },
     });
@@ -1109,6 +1153,41 @@ export async function confirmCustomerPayment(req, res, next) {
   }
 }
 
+export async function cancelCustomerSubscription(req, res, next) {
+  try {
+    const customer = await User.findById(req.params.id)
+      .populate("createdBy", "firstName lastName email role")
+      .populate("supervisorId", "firstName lastName email role");
+
+    if (!customer || normalizeRole(customer.role) !== "CUSTOMER") {
+      res.status(404);
+      throw new Error("Customer not found");
+    }
+
+    const now = new Date();
+    customer.subscriptionEndAt = now;
+    customer.isActive = false;
+
+    const latestInvoice = getLatestOpenInvoice(customer);
+    if (latestInvoice && String(latestInvoice.status || "").toUpperCase() !== "PAID") {
+      latestInvoice.status = "CANCELLED";
+      latestInvoice.paidAt = null;
+    }
+
+    await customer.save();
+
+    await customer.populate("createdBy", "firstName lastName email role");
+    await customer.populate("supervisorId", "firstName lastName email role");
+
+    return res.json({
+      message: "Subscription cancelled and member deactivated",
+      user: customer,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function getCustomerInvoices(req, res, next) {
   try {
     const customer = await User.findById(req.params.id)
@@ -1120,7 +1199,7 @@ export async function getCustomerInvoices(req, res, next) {
       throw new Error("Customer not found");
     }
 
-    if (!canManageCustomerPayment(req, customer) && normalizeRole(req.user?.role) !== "ADMIN") {
+    if (!canManageCustomerPayment(req, customer) && !["ADMIN", "TICKET CHECKER"].includes(normalizeRole(req.user?.role))) {
       return res.status(403).json({ message: "Forbidden: insufficient permissions" });
     }
 
