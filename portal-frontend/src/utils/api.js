@@ -4,10 +4,14 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 export async function apiRequest(path, options = {}) {
   const token = getAuthToken();
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers = {
-    "Content-Type": "application/json",
     ...(options.headers || {}),
   };
+
+  if (!isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;

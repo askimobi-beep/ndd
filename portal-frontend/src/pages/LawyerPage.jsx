@@ -224,6 +224,7 @@ export default function LawyerPage() {
                     <tr>
                       <th className="px-4 py-3 font-semibold">Name</th>
                       <th className="px-4 py-3 font-semibold">Email</th>
+                      <th className="px-4 py-3 font-semibold">Approval</th>
                       <th className="px-4 py-3 font-semibold">Status</th>
                       {canManageLawyers && <th className="px-4 py-3 font-semibold">Actions</th>}
                     </tr>
@@ -234,6 +235,11 @@ export default function LawyerPage() {
                         <td className="px-4 py-3 text-slate-700">{`${record.firstName || ""} ${record.lastName || ""}`.trim()}</td>
                         <td className="px-4 py-3 text-slate-700">{record.email || "-"}</td>
                         <td className="px-4 py-3">
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${record.isApprovedByAdmin ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                            {record.isApprovedByAdmin ? "Approved" : "Pending Admin Approval"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${record.isActive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
                             {record.isActive ? "Active" : "Inactive"}
                           </span>
@@ -243,6 +249,7 @@ export default function LawyerPage() {
                             <div className="flex flex-wrap gap-2">
                               <button
                                 onClick={() => openEditModal(record)}
+                                disabled={!record.isApprovedByAdmin}
                                 className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
                               >
                                 <PencilSquareIcon className="h-4 w-4" />
@@ -250,10 +257,16 @@ export default function LawyerPage() {
                               </button>
                               <button
                                 onClick={() => toggleStatus(record)}
+                                disabled={!record.isApprovedByAdmin}
                                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
                               >
                                 {record.isActive ? "Block" : "Activate"}
                               </button>
+                              {!record.isApprovedByAdmin && (
+                                <span className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                                  Awaiting admin approval
+                                </span>
+                              )}
                             </div>
                           </td>
                         )}

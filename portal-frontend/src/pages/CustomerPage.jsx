@@ -11,8 +11,9 @@ import {
   DocumentIcon,
   EllipsisHorizontalIcon,
 } from "@heroicons/react/24/outline";
+import MemberTicketsModal from "../components/MemberTicketsModal";
 import TopNavbar from "../components/TopNavbar";
-import { apiRequest } from "../utils/api";
+import { API_BASE_URL, apiRequest } from "../utils/api";
 import { getAuthUser, hasAnyRole } from "../utils/auth";
 
 export default function MemberPage() {
@@ -27,7 +28,7 @@ export default function MemberPage() {
   const canViewBillingDetails = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"]);
   const canViewAllActionButtons = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
   const canUsePaymentMethodButton = canViewAllActionButtons;
-  const canUseTicketsButton = canViewAllActionButtons;
+  const canUseTicketsButton = canViewBillingDetails;
   const canUseMoreActionsMenu = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
   const canUseAdminSubscriptionActions = isAdmin;
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -38,6 +39,8 @@ export default function MemberPage() {
   const [fleetCustomers, setFleetCustomers] = useState([]);
   const [licenseFileName, setLicenseFileName] = useState("");
   const [editLicenseFileName, setEditLicenseFileName] = useState("");
+  const [licenseFile, setLicenseFile] = useState(null);
+  const [editLicenseFile, setEditLicenseFile] = useState(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
   const [editingUserId, setEditingUserId] = useState("");
@@ -62,6 +65,11 @@ export default function MemberPage() {
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("ALL");
   const [invoiceSort, setInvoiceSort] = useState("NEWEST");
+  const [showMemberTicketsModal, setShowMemberTicketsModal] = useState(false);
+  const [isMemberTicketsLoading, setIsMemberTicketsLoading] = useState(false);
+  const [memberTicketsRows, setMemberTicketsRows] = useState([]);
+  const [memberTicketsCustomer, setMemberTicketsCustomer] = useState(null);
+  const [memberTicketsSearch, setMemberTicketsSearch] = useState("");
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState("ALL");
   const [dateFilter, setDateFilter] = useState("ALL");
@@ -214,6 +222,47 @@ export default function MemberPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const getFileUrl = (filePath) => {
+    if (!filePath) {
+      return "";
+    }
+
+    if (/^https?:\/\//i.test(filePath)) {
+      return filePath;
+    }
+
+    return `${API_BASE_URL}${String(filePath).startsWith("/") ? filePath : `/${filePath}`}`;
+  };
+
+  const handleLicenseChange = (event, isEdit = false) => {
+    const file = event.target.files?.[0] || null;
+    if (!file) {
+      if (isEdit) {
+        setEditLicenseFile(null);
+        setEditLicenseFileName("");
+      } else {
+        setLicenseFile(null);
+        setLicenseFileName("");
+      }
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type) || file.size > 10 * 1024 * 1024) {
+      setNotification({ text: "License image must be JPG, JPEG, PNG or WEBP and under 10MB.", type: "error" });
+      event.target.value = "";
+      return;
+    }
+
+    if (isEdit) {
+      setEditLicenseFile(file);
+      setEditLicenseFileName(file.name);
+    } else {
+      setLicenseFile(file);
+      setLicenseFileName(file.name);
+    }
+  };
+
   const canSaveCurrentCustomer = useMemo(() => {
     return Boolean(
       String(formData.firstName || "").trim() &&
@@ -258,6 +307,7 @@ export default function MemberPage() {
     setCustomerPlan("INDIVIDUAL");
     setFleetTargetCount(2);
     setLicenseFileName("");
+    setLicenseFile(null);
   };
 
   const loadMembers = useCallback(async () => {
@@ -421,21 +471,26 @@ export default function MemberPage() {
       let data;
 
       if (customerPlan === "INDIVIDUAL") {
+        const submitData = new FormData();
+        submitData.append("firstName", formData.firstName);
+        submitData.append("lastName", formData.lastName);
+        submitData.append("email", formData.email);
+        submitData.append("password", formData.password);
+        submitData.append("phone", formData.phone);
+        submitData.append("office", formData.office);
+        submitData.append("licenseNo", formData.licenseNo);
+        submitData.append("dot", formData.dot);
+        submitData.append("state", formData.state);
+        submitData.append("address", formData.address);
+        submitData.append("customerPlan", "INDIVIDUAL");
+
+        if (licenseFile) {
+          submitData.append("licenseDocuments", licenseFile);
+        }
+
         data = await apiRequest("/api/users/customers", {
           method: "POST",
-          body: JSON.stringify({
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            password: formData.password,
-            phone: formData.phone,
-            office: formData.office,
-            licenseNo: formData.licenseNo,
-            dot: formData.dot,
-            state: formData.state,
-            address: formData.address,
-            customerPlan: "INDIVIDUAL",
-          }),
+          body: submitData,
         });
       } else {
         const customersForSubmit = [...fleetCustomers];
@@ -476,6 +531,7 @@ export default function MemberPage() {
       setNotification({ text: data.message || "Member created successfully", type: "success" });
       setIsModalOpen(false);
       resetForm();
+      setLicenseFile(null);
       await loadMembers();
     } catch (error) {
       setNotification({ text: error.message || "Unable to create member", type: "error" });
@@ -498,8 +554,14 @@ export default function MemberPage() {
       address: record.address || "",
     });
     setEditLicenseFileName("");
+    setEditLicenseFile(null);
     setIsEditOpen(true);
   };
+
+  const editingRecord = useMemo(
+    () => records.find((item) => item._id === editingUserId) || null,
+    [records, editingUserId]
+  );
 
   const handleEditChange = (event) => {
     const { name, value } = event.target;
@@ -511,9 +573,18 @@ export default function MemberPage() {
 
     try {
       setIsEditSubmitting(true);
+      const submitData = new FormData();
+      Object.entries(editFormData).forEach(([key, value]) => {
+        submitData.append(key, value || "");
+      });
+
+      if (editLicenseFile) {
+        submitData.append("licenseDocuments", editLicenseFile);
+      }
+
       const data = await apiRequest(`/api/users/${editingUserId}`, {
         method: "PATCH",
-        body: JSON.stringify(editFormData),
+        body: submitData,
       });
 
       if (data.user) {
@@ -627,6 +698,25 @@ export default function MemberPage() {
     setInvoiceSort("NEWEST");
   };
 
+  const openMemberTicketsModal = async (record) => {
+    try {
+      setIsMemberTicketsLoading(true);
+      setMemberTicketsCustomer(record);
+      setMemberTicketsRows([]);
+      setMemberTicketsSearch("");
+      setShowMemberTicketsModal(true);
+
+      const data = await apiRequest(`/api/tickets?memberId=${encodeURIComponent(record._id)}`);
+      setMemberTicketsRows(Array.isArray(data) ? data : data.tickets || []);
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to load member tickets", type: "error" });
+      setShowMemberTicketsModal(false);
+      setMemberTicketsCustomer(null);
+    } finally {
+      setIsMemberTicketsLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-accent">
       <TopNavbar />
@@ -658,6 +748,7 @@ export default function MemberPage() {
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-8">
             <div className="space-y-6">
               {/* Quick Actions */}
+              {!isTicketChecker && (
               <div className="flex flex-col gap-4">
                 <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Quick Actions</p>
                 <div className="flex flex-wrap gap-3">
@@ -703,6 +794,7 @@ export default function MemberPage() {
                   </button>
                 </div>
               </div>
+              )}
 
               {/* Filters */}
               <div className="flex flex-col gap-4 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between sm:border-t-0 sm:pt-0">
@@ -742,17 +834,20 @@ export default function MemberPage() {
                     >
                       Last Year
                     </button>
-                    <button
-                      onClick={() => setDateFilter("ALL")}
-                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                        dateFilter === "ALL"
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
-                      }`}
-                    >
-                      All
-                    </button>
+                    {!isTicketChecker && (
+                      <button
+                        onClick={() => setDateFilter("ALL")}
+                        className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                          dateFilter === "ALL"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                        }`}
+                      >
+                        All
+                      </button>
+                    )}
                   </div>
+                  {!isTicketChecker && (
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -777,6 +872,7 @@ export default function MemberPage() {
                       Individual ({individualCount})
                     </button>
                   </div>
+                  )}
                   <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10 sm:min-w-[240px]">
                     <MagnifyingGlassIcon className="h-5 w-5 flex-shrink-0 text-slate-400" />
                     <input
@@ -938,6 +1034,15 @@ export default function MemberPage() {
                           <div>
                             <p className="text-xs font-medium text-slate-600">License</p>
                             <span className="inline-block rounded-full bg-purple-50 text-purple-700 px-2 py-1 text-xs font-medium">{record.licenseNo || "NO"}</span>
+                              {Array.isArray(record.licenseFiles) && record.licenseFiles.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(getFileUrl(record.licenseFiles[0].url), "_blank", "noopener,noreferrer")}
+                                  className="mt-2 block text-xs font-semibold text-primary underline"
+                                >
+                                  View License Image
+                                </button>
+                              )}
                           </div>
                           <div>
                             <p className="text-xs font-medium text-slate-600">DOT</p>
@@ -1017,7 +1122,11 @@ export default function MemberPage() {
                             </>
                           )}
                           {canUseTicketsButton && (
-                            <button className="rounded-lg bg-green-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-green-600">
+                            <button
+                              type="button"
+                              onClick={() => openMemberTicketsModal(record)}
+                              className="rounded-lg bg-green-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-green-600"
+                            >
                               🎫 Tickets
                             </button>
                           )}
@@ -1163,7 +1272,7 @@ export default function MemberPage() {
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={(event) => setEditLicenseFileName(event.target.files?.[0]?.name || "")}
+                    onChange={(event) => handleLicenseChange(event, true)}
                   />
                   <label
                     htmlFor="edit-customer-license"
@@ -1171,14 +1280,17 @@ export default function MemberPage() {
                   >
                     Add License Pic
                   </label>
-                  <button
-                    type="button"
-                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary"
-                  >
-                    Upload
-                  </button>
                   <p className="text-xs text-slate-500">{editLicenseFileName || "No file selected"}</p>
                 </div>
+                {Array.isArray(editingRecord?.licenseFiles) && editingRecord?.licenseFiles?.[0]?.url && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(getFileUrl(editingRecord.licenseFiles[0].url), "_blank", "noopener,noreferrer")}
+                    className="mt-2 text-xs font-semibold text-primary underline"
+                  >
+                    View current license image
+                  </button>
+                )}
               </div>
 
               <div className="flex justify-end gap-3">
@@ -1231,6 +1343,8 @@ export default function MemberPage() {
                 {(() => {
                   const memberId = memberIdByUserId[billingCustomer._id] || formatMemberId(1);
                   const subscription = getSubscriptionInsights(billingCustomer);
+                  const isApprovalGranted = !billingCustomer.requiresAdminApproval || billingCustomer.isApprovedByAdmin;
+                  const accountIsActive = Boolean(billingCustomer.isActive && isApprovalGranted);
 
                   return (
                     <>
@@ -1241,8 +1355,8 @@ export default function MemberPage() {
                             <p className="mt-1 text-sm text-slate-600">ID: {memberId}</p>
                             <p className="mt-1 text-sm text-slate-600">{billingCustomer.email || "-"}</p>
                           </div>
-                          <span className={`inline-flex w-fit items-center rounded-full px-4 py-2 text-sm font-semibold ${billingCustomer.isActive ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
-                            {billingCustomer.isActive ? "Active Account" : "Inactive Account"}
+                          <span className={`inline-flex w-fit items-center rounded-full px-4 py-2 text-sm font-semibold ${accountIsActive ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                            {accountIsActive ? "Active Account" : "Inactive Account"}
                           </span>
                         </div>
                       </div>
@@ -1253,8 +1367,8 @@ export default function MemberPage() {
                             <p className="text-xl font-semibold text-slate-900">{`${billingCustomer.customerPlan || "INDIVIDUAL"}-USA MONTHLY`}</p>
                             <p className="text-sm text-slate-500">ID: {String(billingCustomer._id || "").slice(0, 8) || "-"}</p>
                           </div>
-                          <span className={`rounded-full px-4 py-1.5 text-sm font-semibold ${billingCustomer.isActive ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
-                            {billingCustomer.isActive ? "ACTIVE" : "INACTIVE"}
+                          <span className={`rounded-full px-4 py-1.5 text-sm font-semibold ${accountIsActive ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                            {accountIsActive ? "ACTIVE" : "INACTIVE"}
                           </span>
                         </div>
 
@@ -1301,7 +1415,7 @@ export default function MemberPage() {
                         <div className="mt-4 space-y-3 text-sm">
                           <div className="flex items-center justify-between border-b border-[#c9d7ee] pb-2">
                             <span className="text-slate-700">Total Active Subscriptions</span>
-                            <span className="font-semibold text-slate-900">{billingCustomer.isActive ? "1" : "0"}</span>
+                            <span className="font-semibold text-slate-900">{accountIsActive ? "1" : "0"}</span>
                           </div>
                           <div className="flex items-center justify-between border-b border-[#c9d7ee] pb-2">
                             <span className="text-slate-700">Next Renewal</span>
@@ -1472,6 +1586,21 @@ export default function MemberPage() {
           </div>
         </div>
       )}
+
+      <MemberTicketsModal
+        isOpen={showMemberTicketsModal}
+        onClose={() => {
+          setShowMemberTicketsModal(false);
+          setMemberTicketsCustomer(null);
+          setMemberTicketsRows([]);
+          setMemberTicketsSearch("");
+        }}
+        member={memberTicketsCustomer}
+        tickets={memberTicketsRows}
+        search={memberTicketsSearch}
+        onSearchChange={setMemberTicketsSearch}
+        isLoading={isMemberTicketsLoading}
+      />
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/55 p-3 sm:p-6">
@@ -1681,7 +1810,7 @@ export default function MemberPage() {
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(event) => setLicenseFileName(event.target.files?.[0]?.name || "")}
+                      onChange={(event) => handleLicenseChange(event, false)}
                     />
                     <label
                       htmlFor="customer-license"
@@ -1689,12 +1818,6 @@ export default function MemberPage() {
                     >
                       Add License Pic
                     </label>
-                    <button
-                      type="button"
-                      className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary"
-                    >
-                      Upload
-                    </button>
                     <p className="text-xs text-slate-500">{licenseFileName || "No file selected"}</p>
                   </div>
                 </div>

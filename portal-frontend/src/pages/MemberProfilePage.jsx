@@ -7,9 +7,11 @@ import {
   EnvelopeIcon,
   CreditCardIcon,
   BuildingLibraryIcon,
+  DocumentTextIcon,
+  PhotoIcon,
 } from "@heroicons/react/24/outline";
 import TopNavbar from "../components/TopNavbar";
-import { apiRequest } from "../utils/api";
+import { API_BASE_URL, apiRequest } from "../utils/api";
 import { getAuthUser, hasAnyRole } from "../utils/auth";
 
 export default function MemberProfilePage() {
@@ -19,7 +21,9 @@ export default function MemberProfilePage() {
   const authUser = getAuthUser();
   const isMemberSelfView = hasAnyRole(authUser?.role, ["CUSTOMER"]) && !id;
   const [member, setMember] = useState(null);
+  const [tickets, setTickets] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTicketsLoading, setIsTicketsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const memberIdDisplay = new URLSearchParams(location.search).get("memberId") || "";
@@ -29,10 +33,20 @@ export default function MemberProfilePage() {
       try {
         setIsLoading(true);
         const data = isMemberSelfView ? await apiRequest("/api/auth/me") : await apiRequest(`/api/users/${id}`);
-        setMember(data.user);
+        const resolvedMember = data.user;
+        setMember(resolvedMember);
+
+        if (resolvedMember?._id) {
+          setIsTicketsLoading(true);
+          const ticketData = await apiRequest(`/api/tickets?memberId=${encodeURIComponent(resolvedMember._id)}`);
+          setTickets(Array.isArray(ticketData) ? ticketData : ticketData.tickets || []);
+        } else {
+          setTickets([]);
+        }
       } catch (err) {
         setError(err.message || "Unable to load member profile");
       } finally {
+        setIsTicketsLoading(false);
         setIsLoading(false);
       }
     };
@@ -133,6 +147,65 @@ export default function MemberProfilePage() {
     "Status",
     "Actions",
   ];
+
+  const formatDate = (value) => {
+    if (!value) {
+      return "-";
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const getFileUrl = (filePath) => {
+    if (!filePath) {
+      return "";
+    }
+
+    if (/^https?:\/\//i.test(filePath)) {
+      return filePath;
+    }
+
+    return `${API_BASE_URL}${String(filePath).startsWith("/") ? filePath : `/${filePath}`}`;
+  };
+
+  const getPreviewFile = (ticket) => {
+    const candidates = [ticket?.paymentSlipFile, ticket?.caseResultFile, ...(ticket?.ticketDocuments || [])].filter(Boolean);
+    return candidates.find((file) => {
+      const mimeType = String(file?.mimeType || "").toLowerCase();
+      const url = String(file?.url || "");
+      return mimeType.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(url);
+    }) || null;
+  };
+
+  const openFile = (file) => {
+    const resolvedUrl = getFileUrl(file?.url);
+    if (!resolvedUrl) {
+      return;
+    }
+
+    window.open(resolvedUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const getCreatedByName = (ticket) => {
+    return `${ticket?.createdBy?.firstName || ""} ${ticket?.createdBy?.lastName || ""}`.trim() || "-";
+  };
+
+  const getLawyerName = (ticket) => {
+    return `${ticket?.assignedLawyer?.firstName || ""} ${ticket?.assignedLawyer?.lastName || ""}`.trim() || "-";
+  };
+
+  const getTicketNotes = (ticket) => {
+    return ticket?.customerNotes || ticket?.teamNotes || ticket?.description || "-";
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f0f2f5]">
@@ -375,16 +448,100 @@ export default function MemberProfilePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td
-                      colSpan={ticketColumns.length}
-                      className="px-6 py-12 text-center text-sm text-slate-400"
-                    >
-                      No tickets found. Click{" "}
-                      <span className="font-semibold text-primary">Add Ticket</span> to create
-                      the first one.
-                    </td>
-                  </tr>
+                  {isTicketsLoading ? (
+                    <tr>
+                      <td colSpan={ticketColumns.length} className="px-6 py-10 text-center text-sm text-slate-400">
+                        Loading tickets...
+                      </td>
+                    </tr>
+                  ) : tickets.length > 0 ? (
+                    tickets.map((ticket) => {
+                      const previewFile = getPreviewFile(ticket);
+                      const caseResultFile = ticket?.caseResultFile?.url ? ticket.caseResultFile : null;
+                      const primaryTicketFile = Array.isArray(ticket?.ticketDocuments) && ticket.ticketDocuments.length
+                        ? ticket.ticketDocuments[0]
+                        : null;
+
+                      return (
+                        <tr key={ticket._id} className="border-t border-slate-100 align-top">
+                          <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-800">#{ticket.ticketId || "-"}</td>
+                          <td className="px-4 py-4">
+                            {previewFile ? (
+                              <button
+                                type="button"
+                                onClick={() => openFile(previewFile)}
+                                className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 transition hover:border-primary"
+                              >
+                                <img
+                                  src={getFileUrl(previewFile.url)}
+                                  alt={previewFile.originalName || "Ticket preview"}
+                                  className="h-full w-full object-cover"
+                                />
+                              </button>
+                            ) : (
+                              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
+                                <PhotoIcon className="h-5 w-5" />
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-slate-700">{getCreatedByName(ticket)}</td>
+                          <td className="whitespace-nowrap px-4 py-4 text-slate-700">{formatDate(ticket.courtDate)}</td>
+                          <td className="px-4 py-4 text-slate-700">{ticket.courtName || "-"}</td>
+                          <td className="px-4 py-4 text-slate-700">{getLawyerName(ticket)}</td>
+                          <td className="max-w-[220px] px-4 py-4 text-slate-700">
+                            <p className="line-clamp-3">{getTicketNotes(ticket)}</p>
+                          </td>
+                          <td className="px-4 py-4">
+                            {caseResultFile ? (
+                              <button
+                                type="button"
+                                onClick={() => openFile(caseResultFile)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                              >
+                                <DocumentTextIcon className="h-4 w-4" />
+                                View Result
+                              </button>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-4">
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                                ticket.status === "Closed"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : ticket.status === "Cancelled"
+                                    ? "bg-rose-100 text-rose-700"
+                                    : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {ticket.status || "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4">
+                            {primaryTicketFile ? (
+                              <button
+                                type="button"
+                                onClick={() => openFile(primaryTicketFile)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary"
+                              >
+                                <DocumentTextIcon className="h-4 w-4" />
+                                Open
+                              </button>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr className="border-t border-slate-100">
+                      {ticketColumns.map((column) => (
+                        <td key={column} className="px-4 py-6 text-slate-300">-</td>
+                      ))}
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

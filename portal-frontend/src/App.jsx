@@ -17,6 +17,7 @@ import PaymentCheckoutPage from './pages/PaymentCheckoutPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import TicketBoardPage from './pages/TicketBoardPage';
 
 function AppLayout({ children }) {
   return (
@@ -42,6 +43,7 @@ function App() {
         <Route path="/admin-panel" element={<ProtectedRoute><AppLayout><AccountPage /></AppLayout></ProtectedRoute>} />
         <Route path="/account" element={<Navigate to="/dashboard" replace />} />
         <Route path="/ticket-checker" element={<ProtectedRoute allowedRoles={["ADMIN", "TICKET CHECKER"]}><AppLayout><TicketCheckerPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/ticket-board" element={<ProtectedRoute allowedRoles={["ADMIN", "TICKET CHECKER"]}><AppLayout><TicketBoardPage /></AppLayout></ProtectedRoute>} />
         <Route path="/lawyers" element={<ProtectedRoute allowedRoles={["ADMIN", "TICKET CHECKER"]}><AppLayout><LawyerPage /></AppLayout></ProtectedRoute>} />
         <Route path="/supervisor" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AppLayout><SupervisorPage /></AppLayout></ProtectedRoute>} />
         <Route path="/agents" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR"]}><AppLayout><AgentPage /></AppLayout></ProtectedRoute>} />

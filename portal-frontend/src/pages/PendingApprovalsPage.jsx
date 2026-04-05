@@ -11,7 +11,7 @@ import { getAuthUser, hasAnyRole } from "../utils/auth";
 
 export default function PendingApprovalsPage() {
   const user = getAuthUser();
-  const canApproveMembers = hasAnyRole(user?.role, ["ADMIN"]);
+  const canApproveRecords = hasAnyRole(user?.role, ["ADMIN"]);
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState({ text: "", type: "success" });
@@ -19,14 +19,22 @@ export default function PendingApprovalsPage() {
   const loadMembers = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await apiRequest("/api/users?role=CUSTOMER");
-      setRecords(data.users || []);
+      const requests = [apiRequest("/api/users?role=CUSTOMER")];
+
+      if (canApproveRecords) {
+        requests.push(apiRequest("/api/users?role=LAWYER"));
+      }
+
+      const [customerData, lawyerData] = await Promise.all(requests);
+      const customers = customerData?.users || [];
+      const lawyers = canApproveRecords ? lawyerData?.users || [] : [];
+      setRecords([...customers, ...lawyers]);
     } catch (error) {
       setNotification({ text: error.message || "Unable to load members", type: "error" });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [canApproveRecords]);
 
   useEffect(() => {
     loadMembers();
@@ -64,9 +72,17 @@ export default function PendingApprovalsPage() {
     return "Payment Pending";
   };
 
-  const pendingMembers = records.filter(
-    (r) => r.requiresAdminApproval && !r.isApprovedByAdmin && r.paymentStatus === "PAID_APPROVED"
-  );
+  const pendingMembers = records.filter((record) => {
+    if (!record?.requiresAdminApproval || record?.isApprovedByAdmin) {
+      return false;
+    }
+
+    if (String(record.role || "").toUpperCase() === "CUSTOMER") {
+      return record.paymentStatus === "PAID_APPROVED";
+    }
+
+    return true;
+  });
 
   const memberIdByUserId = useMemo(() => {
     const sorted = [...records].sort((a, b) => {
@@ -82,7 +98,7 @@ export default function PendingApprovalsPage() {
   }, [records]);
 
   const approveUser = async (record) => {
-    if (!canApproveMembers) {
+    if (!canApproveRecords) {
       return;
     }
 
@@ -96,9 +112,9 @@ export default function PendingApprovalsPage() {
         setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
       }
 
-      setNotification({ text: data.message || "Member approved successfully", type: "success" });
+      setNotification({ text: data.message || "User approved successfully", type: "success" });
     } catch (error) {
-      setNotification({ text: error.message || "Unable to approve member", type: "error" });
+      setNotification({ text: error.message || "Unable to approve user", type: "error" });
     }
   };
 
@@ -111,8 +127,8 @@ export default function PendingApprovalsPage() {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-3xl font-bold text-slate-900">Member Approvals</h2>
-              <p className="text-sm text-slate-600 mt-1">All members waiting for final admin approval</p>
+              <h2 className="text-3xl font-bold text-slate-900">Pending Approvals</h2>
+              <p className="text-sm text-slate-600 mt-1">All users waiting for final admin approval</p>
             </div>
             <a href="/members" className="text-sm font-semibold text-primary hover:text-secondary transition">
               ← Back to Dashboard
@@ -223,7 +239,7 @@ export default function PendingApprovalsPage() {
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 mb-3">Actions</p>
                           <div className="flex flex-col gap-2">
-                            {canApproveMembers ? (
+                            {canApproveRecords ? (
                               <button
                                 onClick={() => approveUser(record)}
                                 className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
@@ -239,6 +255,9 @@ export default function PendingApprovalsPage() {
                               <EllipsisHorizontalIcon className="h-4 w-4" />
                               View Details
                             </button>
+                            <span className="rounded-lg bg-slate-100 px-3 py-2 text-center text-xs font-semibold text-slate-700">
+                              {String(record.role || "").toUpperCase() === "LAWYER" ? "Role: Lawyer" : "Role: Member"}
+                            </span>
                           </div>
                         </div>
                     </div>

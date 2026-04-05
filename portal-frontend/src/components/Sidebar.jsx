@@ -22,8 +22,7 @@ export default function Sidebar() {
   const canViewSupervisorPage = hasAnyRole(user?.role, ["ADMIN"]);
   const canViewAgentPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR"]);
   const canViewMemberPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"]);
-  const canViewPendingApprovalsPage = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
-  const canManageUsers = canViewTicketMakerPage || canViewLawyerPage || canViewSupervisorPage || canViewAgentPage || canViewMemberPage || canViewPendingApprovalsPage;
+  const canManageUsers = canViewTicketMakerPage || canViewLawyerPage || canViewSupervisorPage || canViewAgentPage || canViewMemberPage;
   const linkBaseClass = "flex items-center gap-4 px-5 py-3 rounded-xl transition-all duration-300 cursor-pointer";
   const linkActiveClass = "bg-gradient-to-r from-secondary to-primary shadow-md";
   const linkIdleClass = "hover:bg-secondary/70";
@@ -105,7 +104,7 @@ export default function Sidebar() {
                     to="/ticket-checker"
                     className={({ isActive }) => `px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-secondary/80 shadow-sm' : 'hover:bg-secondary/60'}`}
                   >
-                    Ticket Checker
+                    Ticket Board
                   </NavLink>
                 )}
                 {canViewLawyerPage && (
@@ -138,14 +137,6 @@ export default function Sidebar() {
                     className={({ isActive }) => `px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-secondary/80 shadow-sm' : 'hover:bg-secondary/60'}`}
                   >
                     Members
-                  </NavLink>
-                )}
-                {canViewPendingApprovalsPage && (
-                  <NavLink
-                    to="/pending-approvals"
-                    className={({ isActive }) => `px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-secondary/80 shadow-sm' : 'hover:bg-secondary/60'}`}
-                  >
-                    Pending Approvals
                   </NavLink>
                 )}
               </div>

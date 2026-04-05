@@ -2,6 +2,23 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { sendEmail } from "../utils/sendEmail.js";
 
+function mapUploadedFile(file) {
+  if (!file) {
+    return null;
+  }
+
+  const folder = file.destination?.split("uploads").pop()?.replace(/\\/g, "/") || "";
+  const filePath = `${folder}/${file.filename}`.replace(/^\/+/, "");
+
+  return {
+    originalName: file.originalname || "",
+    fileName: file.filename || "",
+    mimeType: file.mimetype || "",
+    size: Number(file.size || 0),
+    url: `/uploads/${filePath}`,
+  };
+}
+
 const PLAN_PRICES = {
   INDIVIDUAL: 54.99,
   FLEET: 44.99,
@@ -110,10 +127,6 @@ function canAccessUserRecord(req, user, { forWrite = false } = {}) {
   const supervisorId = getReferenceId(user?.supervisorId);
 
   if (actorRole === "ADMIN") {
-    if (forWrite && recordRole === "LAWYER") {
-      return false;
-    }
-
     return true;
   }
 
@@ -138,7 +151,11 @@ function canAccessUserRecord(req, user, { forWrite = false } = {}) {
   }
 
   if (actorRole === "TICKET CHECKER") {
-    return recordRole === "LAWYER" || recordRole === "CUSTOMER";
+    if (recordRole === "LAWYER") {
+      return forWrite ? Boolean(user?.isApprovedByAdmin) : true;
+    }
+
+    return recordRole === "CUSTOMER";
   }
 
   return false;
@@ -235,6 +252,11 @@ function buildCreationMeta(req, role, body = {}) {
   };
 
   if (targetRole === "AGENT" && actorRole === "SUPERVISOR") {
+    meta.requiresAdminApproval = true;
+    meta.isApprovedByAdmin = false;
+  }
+
+  if (targetRole === "LAWYER" && actorRole === "TICKET CHECKER") {
     meta.requiresAdminApproval = true;
     meta.isApprovedByAdmin = false;
   }
@@ -371,9 +393,13 @@ async function createUserByRole(req, res, next, role, successLabel) {
 
     payload.email = normalizedEmail;
     const creationMeta = buildCreationMeta(req, role, req.body);
+    const uploadedLicenses = Array.isArray(req.files?.licenseDocuments)
+      ? req.files.licenseDocuments.map(mapUploadedFile).filter(Boolean)
+      : [];
     const user = await User.create({
       ...payload,
       ...creationMeta,
+      licenseFiles: uploadedLicenses,
     });
 
     let message = creationMeta.requiresAdminApproval
@@ -657,6 +683,14 @@ export async function updateUser(req, res, next) {
       user.email = normalizedEmail;
     }
 
+    const uploadedLicenses = Array.isArray(req.files?.licenseDocuments)
+      ? req.files.licenseDocuments.map(mapUploadedFile).filter(Boolean)
+      : [];
+
+    if (uploadedLicenses.length) {
+      user.licenseFiles = [...(user.licenseFiles || []), ...uploadedLicenses];
+    }
+
     await user.save();
 
     return res.json({
@@ -744,14 +778,17 @@ export async function updateUserApproval(req, res, next) {
 
 export async function searchUserByPhone(req, res, next) {
   try {
-    const { phone } = req.query;
+    const phone = String(req.query?.phone || "").trim();
+    const email = normalizeEmail(req.query?.email || "");
 
-    if (!phone) {
+    if (!phone && !email) {
       res.status(400);
-      throw new Error("Phone number is required");
+      throw new Error("Phone or email is required");
     }
 
-    const user = await User.findOne({ phone: String(phone).trim() })
+    const query = phone ? { phone } : { email };
+
+    const user = await User.findOne(query)
       .populate("createdBy", "firstName lastName email role")
       .populate("supervisorId", "firstName lastName email role");
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import TopNavbar from "../components/TopNavbar";
 import RegisterUserModal from "../components/RegisterUserModal";
+import TicketBoardPage from "./TicketBoardPage";
 import { apiRequest } from "../utils/api";
 import { getAuthUser, hasAnyRole } from "../utils/auth";
 import {
@@ -16,7 +17,9 @@ import { useNavigate } from "react-router-dom";
 export default function TicketCheckerPage() {
   const navigate = useNavigate();
   const user = getAuthUser();
+  const isTicketManager = hasAnyRole(user?.role, ["TICKET CHECKER"]);
   const canManageTicketCheckers = hasAnyRole(user?.role, ["ADMIN"]);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notification, setNotification] = useState({ text: "", type: "success" });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,6 +45,7 @@ export default function TicketCheckerPage() {
     phone: "",
     password: "",
   });
+
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -107,6 +111,10 @@ export default function TicketCheckerPage() {
     });
   }, [records, search]);
 
+  // If ticket manager (not admin), show Ticket Board directly
+  if (isTicketManager && !canManageTicketCheckers) {
+    return <TicketBoardPage />;
+  }
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -237,9 +245,12 @@ export default function TicketCheckerPage() {
                   </button>
                 </div>
               )}
+
+
             </div>
           </div>
 
+          {canManageTicketCheckers && (
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -264,6 +275,7 @@ export default function TicketCheckerPage() {
               <button className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:bg-primary/5 hover:text-primary">Last 6 Months</button>
             </div>
           </div>
+          )}
 
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-8">
             <div className="flex items-center justify-between">
@@ -273,7 +285,7 @@ export default function TicketCheckerPage() {
 
             {!canManageTicketCheckers && (
               <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                Ticket Checker users have read-only page access. Account creation and list management are admin only.
+                Ticket manager dashboard is ready. Use the top buttons to open Members, Ticket Board, and Lawyers.
               </div>
             )}
 

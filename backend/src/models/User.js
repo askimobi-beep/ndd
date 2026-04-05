@@ -148,6 +148,34 @@ const userSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    licenseFiles: [
+      {
+        originalName: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        fileName: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        mimeType: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        size: {
+          type: Number,
+          default: 0,
+        },
+        url: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+      },
+    ],
     password: {
       type: String,
       required: true,
