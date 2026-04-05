@@ -118,15 +118,13 @@ export default function ReservationManagementPage() {
 
   const reservedMembers = useMemo(() => {
     return records.filter((record) => {
-      const ageInDays = daysSince(record.createdAt);
       const paymentStatus = String(record?.paymentStatus || record?.paymentStage || "").trim().toUpperCase();
       return (
         Boolean(record.isActive) &&
         !record.isApprovedByAdmin &&
         paymentStatus !== "UNDER_REVIEW" &&
         paymentStatus !== "PAID_APPROVED" &&
-        paymentStatus !== "PAID_PENDING_APPROVAL" &&
-        ageInDays <= 7
+        paymentStatus !== "PAID_PENDING_APPROVAL"
       );
     });
   }, [records]);
@@ -206,6 +204,7 @@ export default function ReservationManagementPage() {
 
         setNotification({ text: data.message || "Member claimed successfully", type: "success" });
         await loadMembers();
+        setActiveTab("RESERVED");
       } catch (error) {
         setNotification({ text: error.message || "Unable to claim member", type: "error" });
       } finally {
@@ -222,7 +221,7 @@ export default function ReservationManagementPage() {
           <div className="rounded-[24px] bg-gradient-to-r from-primary via-secondary to-[#1f3c97] p-5 text-white shadow-[0_16px_40px_rgba(0,87,231,0.20)]">
             <div className="flex items-start justify-between">
             <div>
-                <h2 className="text-2xl font-semibold tracking-tight">Reserved | Reviewed | Claimed</h2>
+                <h2 className="text-2xl font-semibold tracking-tight">Reserved | Reviewed | Claim</h2>
                 <p className="mt-1 text-sm text-blue-100">Manage reservations, reviews, and member claims</p>
             </div>
               <a href="/members" className="rounded-xl border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/20">
