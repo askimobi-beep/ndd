@@ -104,7 +104,7 @@ export default function Sidebar() {
                     to="/ticket-checker"
                     className={({ isActive }) => `px-3 py-2 rounded-lg transition-all duration-300 ${isActive ? 'bg-secondary/80 shadow-sm' : 'hover:bg-secondary/60'}`}
                   >
-                    Ticket Board
+                    Ticket Checker
                   </NavLink>
                 )}
                 {canViewLawyerPage && (

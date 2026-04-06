@@ -65,6 +65,9 @@ export default function TicketBoardPage() {
     paymentSlip: null,
   });
   const [previewFile, setPreviewFile] = useState(null);
+  const [showCustomerProfileModal, setShowCustomerProfileModal] = useState(false);
+  const [customerProfileData, setCustomerProfileData] = useState(null);
+  const [customerProfileLoading, setCustomerProfileLoading] = useState(false);
 
   const filterOptions = [
     "All Tickets",
@@ -595,9 +598,9 @@ export default function TicketBoardPage() {
 
   const openCustomerOverlay = async (ticket) => {
     try {
-      setLookupLoading(true);
-      setLookupError("");
-      setLookupSuccess("");
+      setCustomerProfileLoading(true);
+      setCustomerProfileData(null);
+      setShowCustomerProfileModal(true);
 
       let userData = null;
       if (ticket?.memberId) {
@@ -611,28 +614,17 @@ export default function TicketBoardPage() {
       }
 
       if (!userData) {
-        setLookupError("Customer not found");
+        setBoardNotification({ text: "Customer not found", type: "error" });
+        setShowCustomerProfileModal(false);
         return;
       }
 
-      setSearchedMember(userData);
-      setMemberEmail(userData.email || "");
-      setLookupSuccess("Customer data retrieved successfully.");
-      setShowLookupModal(true);
-
-      try {
-        setIsInvoicesLoading(true);
-        const invoiceData = await apiRequest(`/api/users/${userData._id}/invoices`);
-        setMemberInvoices(Array.isArray(invoiceData.invoices) ? invoiceData.invoices : []);
-      } catch {
-        setMemberInvoices([]);
-      } finally {
-        setIsInvoicesLoading(false);
-      }
+      setCustomerProfileData(userData);
     } catch (error) {
-      setLookupError(error.message || "Unable to load customer details");
+      setBoardNotification({ text: error.message || "Unable to load customer details", type: "error" });
+      setShowCustomerProfileModal(false);
     } finally {
-      setLookupLoading(false);
+      setCustomerProfileLoading(false);
     }
   };
 
@@ -851,13 +843,21 @@ export default function TicketBoardPage() {
                           View Customer Profile
                         </button>
                       </div>
-                      <button
-                        onClick={() => handleEditTicket(ticket)}
-                        className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-3 py-2 text-[11px] font-semibold text-white transition hover:opacity-95"
-                      >
-                        <PencilSquareIcon className="h-3.5 w-3.5" />
-                        Click to update ticket details
-                      </button>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => handleEditTicket(ticket)}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-3 py-2 text-[11px] font-semibold text-white transition hover:opacity-95"
+                        >
+                          <PencilSquareIcon className="h-3.5 w-3.5" />
+                          Update Ticket
+                        </button>
+                        <button
+                          onClick={() => { setSelectedTicket(ticket); setShowDeleteModal(true); }}
+                          className="inline-flex items-center justify-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100"
+                        >
+                          Delete Ticket
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1197,6 +1197,111 @@ export default function TicketBoardPage() {
                   Delete
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Profile Modal */}
+      {showCustomerProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 lg:p-6">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3 lg:px-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 lg:text-xl">Customer Profile</h3>
+                <p className="text-xs text-slate-500">Member account information</p>
+              </div>
+              <button
+                onClick={() => { setShowCustomerProfileModal(false); setCustomerProfileData(null); }}
+                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4 lg:p-6">
+              {customerProfileLoading && (
+                <p className="py-10 text-center text-sm text-slate-500">Loading customer profile...</p>
+              )}
+              {!customerProfileLoading && customerProfileData && (
+                <div className="space-y-4">
+                  {/* Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div>
+                      <h4 className="text-2xl font-bold uppercase text-slate-900">
+                        {`${customerProfileData.firstName || ""} ${customerProfileData.lastName || ""}`.trim() || "N/A"}
+                      </h4>
+                      <p className="text-xs text-slate-500">Member ID: {customerProfileData.memberId || customerProfileData._id?.slice(-6) || "N/A"}</p>
+                    </div>
+                    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${customerProfileData.isActive ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-rose-300 bg-rose-50 text-rose-700"}`}>
+                      {customerProfileData.isActive ? "Active Member" : "Inactive Member"}
+                    </span>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-slate-200 p-4 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-primary">Contact</p>
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <EnvelopeIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                        <span className="break-all">{customerProfileData.email || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <PhoneIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                        <span>{customerProfileData.phone || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <BuildingOffice2Icon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                        <span>{customerProfileData.office || "Lahore"}</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 p-4 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-primary">Account Details</p>
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <UserIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                        <span>Agent: {customerProfileData.createdBy?.firstName || "N/A"} {customerProfileData.createdBy?.lastName || ""}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <CalendarDaysIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                        <span>Joined: {customerProfileData.createdAt ? new Date(customerProfileData.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "N/A"}</span>
+                      </div>
+                      <div className="text-sm text-slate-700">
+                        <span className="font-medium">Plan: </span>
+                        <span className="capitalize">{customerProfileData.customerPlan || "Individual"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* License Info */}
+                  {(customerProfileData.licenseNo || customerProfileData.dot || customerProfileData.state) && (
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">Documents</p>
+                      <div className="flex flex-wrap gap-3 text-sm text-slate-700">
+                        {customerProfileData.licenseNo && (
+                          <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700">License: {customerProfileData.licenseNo}</span>
+                        )}
+                        {customerProfileData.dot && (
+                          <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700">DOT: {customerProfileData.dot}</span>
+                        )}
+                        {customerProfileData.state && (
+                          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">State: {customerProfileData.state}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {customerProfileData.address && (
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary">Address</p>
+                      <p className="text-sm text-slate-700">{customerProfileData.address}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              {!customerProfileLoading && !customerProfileData && (
+                <p className="py-10 text-center text-sm text-slate-500">Customer not found.</p>
+              )}
             </div>
           </div>
         </div>

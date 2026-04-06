@@ -14,6 +14,7 @@ import {
   getPaymentCheckoutDetails,
   submitPaymentCheckout,
   cancelCustomerSubscription,
+  deleteUser,
   getUserById,
   listUsers,
   sendCustomerPaymentInvoiceEmail,
@@ -51,7 +52,8 @@ router
     authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"),
     uploadLicenseFiles,
     updateUser
-  );
+  )
+  .delete(authorizeRoles("ADMIN"), deleteUser);
 router.route("/:id/status").patch(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"), updateUserStatus);
 router.route("/:id/approval").patch(authorizeRoles("ADMIN"), updateUserApproval);
 router.route("/:id/payment-confirmation").patch(authorizeRoles("ADMIN"), confirmCustomerPayment);

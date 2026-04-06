@@ -33,6 +33,9 @@ export default function AgentPage() {
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingRecord, setDeletingRecord] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [formData, setFormData] = useState({
     userRole: "AGENT",
     office: "Lahore Office (LHR)",
@@ -212,6 +215,22 @@ export default function AgentPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deletingRecord?._id) return;
+    try {
+      setIsDeleting(true);
+      await apiRequest(`/api/users/${deletingRecord._id}`, { method: "DELETE" });
+      setRecords((prev) => prev.filter((r) => r._id !== deletingRecord._id));
+      setNotification({ text: "Agent deleted successfully", type: "success" });
+      setShowDeleteModal(false);
+      setDeletingRecord(null);
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to delete agent", type: "error" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-accent">
       <TopNavbar />
@@ -338,6 +357,14 @@ export default function AgentPage() {
                                 {record.isActive ? "Block" : "Activate"}
                               </button>
                             )}
+                            {canApproveUsers && (
+                              <button
+                                onClick={() => { setDeletingRecord(record); setShowDeleteModal(true); }}
+                                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-700"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -426,6 +453,37 @@ export default function AgentPage() {
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
       />
+
+      {showDeleteModal && deletingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h3 className="text-base font-semibold text-slate-900">Delete Agent?</h3>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-600">
+                Permanently delete <strong>{`${deletingRecord.firstName || ""} ${deletingRecord.lastName || ""}`.trim()}</strong>? This action cannot be undone.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => { setShowDeleteModal(false); setDeletingRecord(null); }}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-xl bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

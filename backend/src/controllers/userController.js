@@ -1250,3 +1250,28 @@ export async function getCustomerInvoices(req, res, next) {
     return next(error);
   }
 }
+
+export async function deleteUser(req, res, next) {
+  try {
+    if (normalizeRole(req.user?.role) !== "ADMIN") {
+      return res.status(403).json({ message: "Forbidden: only admins can delete members" });
+    }
+
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    if (normalizeRole(user.role) === "ADMIN") {
+      return res.status(400).json({ message: "Admin accounts cannot be deleted" });
+    }
+
+    await user.deleteOne();
+
+    return res.json({ message: "Member deleted successfully" });
+  } catch (error) {
+    return next(error);
+  }
+}

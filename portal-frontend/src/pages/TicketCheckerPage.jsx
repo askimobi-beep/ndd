@@ -5,17 +5,13 @@ import TicketBoardPage from "./TicketBoardPage";
 import { apiRequest } from "../utils/api";
 import { getAuthUser, hasAnyRole } from "../utils/auth";
 import {
-  HomeIcon,
-  ScaleIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
-import { useNavigate } from "react-router-dom";
 
 export default function TicketCheckerPage() {
-  const navigate = useNavigate();
   const user = getAuthUser();
   const isTicketManager = hasAnyRole(user?.role, ["TICKET CHECKER"]);
   const canManageTicketCheckers = hasAnyRole(user?.role, ["ADMIN"]);
@@ -36,6 +32,9 @@ export default function TicketCheckerPage() {
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingRecord, setDeletingRecord] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [formData, setFormData] = useState({
     userRole: "TICKET CHECKER",
     office: "Lahore Office (LHR) Auto-assigned",
@@ -205,6 +204,22 @@ export default function TicketCheckerPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deletingRecord?._id) return;
+    try {
+      setIsDeleting(true);
+      await apiRequest(`/api/users/${deletingRecord._id}`, { method: "DELETE" });
+      setRecords((prev) => prev.filter((r) => r._id !== deletingRecord._id));
+      setNotification({ text: "Ticket checker deleted successfully", type: "success" });
+      setShowDeleteModal(false);
+      setDeletingRecord(null);
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to delete ticket checker", type: "error" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-accent">
       <TopNavbar />
@@ -222,20 +237,6 @@ export default function TicketCheckerPage() {
 
               {canManageTicketCheckers && (
                 <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    onClick={() => navigate("/dashboard")}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-white/20"
-                  >
-                    <HomeIcon className="h-5 w-5" />
-                    Dashboard
-                  </button>
-                  <button
-                    onClick={() => navigate("/lawyers")}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-white/20"
-                  >
-                    <ScaleIcon className="h-5 w-5" />
-                    Lawyers
-                  </button>
                   <button
                     onClick={() => setIsModalOpen(true)}
                     className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-base font-semibold text-primary transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-xl"
@@ -329,6 +330,12 @@ export default function TicketCheckerPage() {
                             >
                               {record.isActive ? "Block" : "Activate"}
                             </button>
+                            <button
+                              onClick={() => { setDeletingRecord(record); setShowDeleteModal(true); }}
+                              className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-700"
+                            >
+                              Delete
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -416,6 +423,37 @@ export default function TicketCheckerPage() {
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
       />
+
+      {showDeleteModal && deletingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h3 className="text-base font-semibold text-slate-900">Delete Ticket Checker?</h3>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-600">
+                Permanently delete <strong>{`${deletingRecord.firstName || ""} ${deletingRecord.lastName || ""}`.trim()}</strong>? This action cannot be undone.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => { setShowDeleteModal(false); setDeletingRecord(null); }}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-xl bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

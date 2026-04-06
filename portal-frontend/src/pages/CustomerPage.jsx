@@ -70,6 +70,9 @@ export default function MemberPage() {
   const [memberTicketsRows, setMemberTicketsRows] = useState([]);
   const [memberTicketsCustomer, setMemberTicketsCustomer] = useState(null);
   const [memberTicketsSearch, setMemberTicketsSearch] = useState("");
+  const [showDeleteMemberModal, setShowDeleteMemberModal] = useState(false);
+  const [deletingMember, setDeletingMember] = useState(null);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState("ALL");
   const [dateFilter, setDateFilter] = useState("ALL");
@@ -717,6 +720,23 @@ export default function MemberPage() {
     }
   };
 
+  const handleDeleteMember = async () => {
+    if (!deletingMember?._id) return;
+
+    try {
+      setIsDeletingMember(true);
+      await apiRequest(`/api/users/${deletingMember._id}`, { method: "DELETE" });
+      setRecords((prev) => prev.filter((r) => r._id !== deletingMember._id));
+      setNotification({ text: "Member deleted successfully", type: "success" });
+      setShowDeleteMemberModal(false);
+      setDeletingMember(null);
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to delete member", type: "error" });
+    } finally {
+      setIsDeletingMember(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-accent">
       <TopNavbar />
@@ -1178,6 +1198,17 @@ export default function MemberPage() {
                                       >
                                         Cancel Subscription
                                       </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setDeletingMember(record);
+                                          setShowDeleteMemberModal(true);
+                                          setMoreActionsMemberId("");
+                                        }}
+                                        className="mt-1 w-full rounded-lg bg-rose-600 px-2 py-1.5 text-left text-xs font-semibold text-white transition hover:bg-rose-700"
+                                      >
+                                        Delete Member
+                                      </button>
                                     </>
                                   )}
                                 </div>
@@ -1601,6 +1632,38 @@ export default function MemberPage() {
         onSearchChange={setMemberTicketsSearch}
         isLoading={isMemberTicketsLoading}
       />
+
+      {/* Delete Member Confirmation Modal */}
+      {showDeleteMemberModal && deletingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h3 className="text-base font-semibold text-slate-900">Delete Member?</h3>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-600">
+                Permanently delete <strong>{`${deletingMember.firstName || ""} ${deletingMember.lastName || ""}`.trim()}</strong>? This action cannot be undone and will remove all associated data.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => { setShowDeleteMemberModal(false); setDeletingMember(null); }}
+                  disabled={isDeletingMember}
+                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteMember}
+                  disabled={isDeletingMember}
+                  className="flex-1 rounded-xl bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {isDeletingMember ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/55 p-3 sm:p-6">

@@ -13,11 +13,15 @@ export default function LawyerPage() {
   const user = getAuthUser();
   const canViewLawyers = hasAnyRole(user?.role, ["ADMIN", "TICKET CHECKER"]);
   const canManageLawyers = hasAnyRole(user?.role, ["TICKET CHECKER"]);
+  const canApproveLawyers = hasAnyRole(user?.role, ["ADMIN"]);
 
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [notification, setNotification] = useState({ text: "", type: "success" });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingRecord, setDeletingRecord] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -159,6 +163,39 @@ export default function LawyerPage() {
     }
   };
 
+  const approveLawyer = async (record) => {
+    try {
+      const data = await apiRequest(`/api/users/${record._id}/approval`, {
+        method: "PATCH",
+        body: JSON.stringify({ isApprovedByAdmin: true }),
+      });
+
+      if (data.user) {
+        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
+      }
+
+      setNotification({ text: data.message || "Lawyer approved successfully", type: "success" });
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to approve lawyer", type: "error" });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingRecord?._id) return;
+    try {
+      setIsDeleting(true);
+      await apiRequest(`/api/users/${deletingRecord._id}`, { method: "DELETE" });
+      setRecords((prev) => prev.filter((r) => r._id !== deletingRecord._id));
+      setNotification({ text: "Lawyer deleted successfully", type: "success" });
+      setShowDeleteModal(false);
+      setDeletingRecord(null);
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to delete lawyer", type: "error" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-accent">
       <TopNavbar />
@@ -226,7 +263,7 @@ export default function LawyerPage() {
                       <th className="px-4 py-3 font-semibold">Email</th>
                       <th className="px-4 py-3 font-semibold">Approval</th>
                       <th className="px-4 py-3 font-semibold">Status</th>
-                      {canManageLawyers && <th className="px-4 py-3 font-semibold">Actions</th>}
+                      {(canManageLawyers || canApproveLawyers) && <th className="px-4 py-3 font-semibold">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -244,28 +281,56 @@ export default function LawyerPage() {
                             {record.isActive ? "Active" : "Inactive"}
                           </span>
                         </td>
-                        {canManageLawyers && (
+                        {(canManageLawyers || canApproveLawyers) && (
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap gap-2">
-                              <button
-                                onClick={() => openEditModal(record)}
-                                disabled={!record.isApprovedByAdmin}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
-                              >
-                                <PencilSquareIcon className="h-4 w-4" />
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => toggleStatus(record)}
-                                disabled={!record.isApprovedByAdmin}
-                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                              >
-                                {record.isActive ? "Block" : "Activate"}
-                              </button>
-                              {!record.isApprovedByAdmin && (
-                                <span className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-                                  Awaiting admin approval
-                                </span>
+                              {canApproveLawyers && !record.isApprovedByAdmin && (
+                                <button
+                                  onClick={() => approveLawyer(record)}
+                                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                                >
+                                  Approve
+                                </button>
+                              )}
+                              {canApproveLawyers && (
+                                <>
+                                  <button
+                                    onClick={() => toggleStatus(record)}
+                                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                                  >
+                                    {record.isActive ? "Block" : "Activate"}
+                                  </button>
+                                  <button
+                                    onClick={() => { setDeletingRecord(record); setShowDeleteModal(true); }}
+                                    className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-700"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                              {canManageLawyers && (
+                                <>
+                                  <button
+                                    onClick={() => openEditModal(record)}
+                                    disabled={!record.isApprovedByAdmin}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                                  >
+                                    <PencilSquareIcon className="h-4 w-4" />
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => toggleStatus(record)}
+                                    disabled={!record.isApprovedByAdmin}
+                                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                                  >
+                                    {record.isActive ? "Block" : "Activate"}
+                                  </button>
+                                  {!record.isApprovedByAdmin && (
+                                    <span className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                                      Awaiting admin approval
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </div>
                           </td>
@@ -364,6 +429,37 @@ export default function LawyerPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDeleteModal && deletingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h3 className="text-base font-semibold text-slate-900">Delete Lawyer?</h3>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-600">
+                Permanently delete <strong>{`${deletingRecord.firstName || ""} ${deletingRecord.lastName || ""}`.trim()}</strong>? This action cannot be undone.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => { setShowDeleteModal(false); setDeletingRecord(null); }}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-xl bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
