@@ -722,7 +722,13 @@ export async function updateUserStatus(req, res, next) {
       return res.status(403).json({ message: "Forbidden: insufficient permissions" });
     }
 
-    user.isActive = Boolean(isActive);
+    const nextIsActive = Boolean(isActive);
+    user.isActive = nextIsActive;
+
+    if (!nextIsActive && normalizeRole(user.role) === "CUSTOMER") {
+      user.subscriptionEndAt = new Date();
+    }
+
     await user.save();
 
     await user.populate("createdBy", "firstName lastName email role");
@@ -932,6 +938,30 @@ function normalizePaymentMethod(value = "") {
   return "CREDIT_CARD";
 }
 
+function normalizeCardBrand(value = "") {
+  const brand = String(value || "").trim().toUpperCase();
+  const allowed = ["VISA", "MASTERCARD", "AMEX", "DISCOVER"];
+  return allowed.includes(brand) ? brand : "";
+}
+
+function normalizeCardType(value = "") {
+  const cardType = String(value || "").trim().toUpperCase();
+  return ["CREDIT", "DEBIT"].includes(cardType) ? cardType : "";
+}
+
+function extractCardLast4(value = "") {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.slice(-4);
+}
+
+function normalizePaymentCard(payload = {}) {
+  return {
+    brand: normalizeCardBrand(payload.brand),
+    cardType: normalizeCardType(payload.cardType),
+    last4: extractCardLast4(payload.last4 || payload.cardNumber),
+  };
+}
+
 function buildInvoiceHtml({ customer, paymentUrl }) {
   const fullName = `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || "Customer";
   const planLabel = getCustomerPlanLabel(customer?.customerPlan);
@@ -1067,7 +1097,7 @@ export async function getPaymentCheckoutDetails(req, res, next) {
     }
 
     const customer = await User.findById(payload.customerId).select(
-      "firstName lastName email phone office createdAt customerPlan paymentStatus paymentMethod paymentSubmittedAt subscriptionStartAt subscriptionEndAt invoices"
+      "firstName lastName email phone office createdAt customerPlan paymentStatus paymentMethod paymentCard paymentSubmittedAt subscriptionStartAt subscriptionEndAt invoices"
     );
 
     if (!customer) {
@@ -1118,10 +1148,12 @@ export async function submitPaymentCheckout(req, res, next) {
     }
 
     const paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
+    const paymentCard = normalizePaymentCard(req.body?.paymentCard || {});
     const now = new Date();
 
     customer.paymentStatus = "UNDER_REVIEW";
     customer.paymentMethod = paymentMethod;
+    customer.paymentCard = paymentMethod === "CREDIT_CARD" ? paymentCard : { brand: "", cardType: "", last4: "" };
     customer.paymentSubmittedAt = now;
     customer.paymentConfirmedAt = null;
     customer.requiresAdminApproval = true;
@@ -1266,6 +1298,10 @@ export async function deleteUser(req, res, next) {
 
     if (normalizeRole(user.role) === "ADMIN") {
       return res.status(400).json({ message: "Admin accounts cannot be deleted" });
+    }
+
+    if (normalizeRole(user.role) === "CUSTOMER") {
+      return res.status(400).json({ message: "Members cannot be deleted once they are added" });
     }
 
     await user.deleteOne();

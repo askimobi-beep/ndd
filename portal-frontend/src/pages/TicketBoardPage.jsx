@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import TopNavbar from "../components/TopNavbar";
 import { API_BASE_URL, apiRequest } from "../utils/api";
 import CreateTicketModal from "../components/CreateTicketModal";
@@ -22,6 +23,8 @@ import {
 } from "@heroicons/react/24/outline";
 
 export default function TicketBoardPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [tickets, setTickets] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -68,6 +71,11 @@ export default function TicketBoardPage() {
   const [showCustomerProfileModal, setShowCustomerProfileModal] = useState(false);
   const [customerProfileData, setCustomerProfileData] = useState(null);
   const [customerProfileLoading, setCustomerProfileLoading] = useState(false);
+  const [showCustomRangeModal, setShowCustomRangeModal] = useState(false);
+  const [customRangeFromDraft, setCustomRangeFromDraft] = useState("");
+  const [customRangeToDraft, setCustomRangeToDraft] = useState("");
+  const [customRangeFrom, setCustomRangeFrom] = useState("");
+  const [customRangeTo, setCustomRangeTo] = useState("");
 
   const filterOptions = [
     "All Tickets",
@@ -135,6 +143,23 @@ export default function TicketBoardPage() {
     return ticket?.customerPhone || member?.phone || "-";
   };
 
+  const normalizeTicketStatus = (value) => String(value || "").trim().toLowerCase();
+
+  const isCourtDateInNextDays = (value, days) => {
+    if (!value) {
+      return false;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return false;
+    }
+
+    const now = Date.now();
+    const diff = date.getTime() - now;
+    return diff >= 0 && diff <= days * 24 * 60 * 60 * 1000;
+  };
+
   const filteredTickets = tickets.filter((ticket) => {
     const searchTerm = search.toLowerCase();
     const matchesSearch =
@@ -143,14 +168,72 @@ export default function TicketBoardPage() {
       (ticket.customerEmail?.toLowerCase().includes(searchTerm) || false);
 
     let matchesFilter = true;
-    if (selectedFilter !== "All Tickets") {
-      matchesFilter = ticket.status === selectedFilter;
+    if (selectedFilter === "Next 15 Days") {
+      matchesFilter = isCourtDateInNextDays(ticket.courtDate, 15);
+    } else if (selectedFilter === "Custom Range") {
+      if (!customRangeFrom || !customRangeTo) {
+        matchesFilter = true;
+      } else {
+        const ticketDate = ticket?.courtDate ? new Date(ticket.courtDate) : null;
+        const fromDate = new Date(customRangeFrom);
+        const toDate = new Date(customRangeTo);
+        if (!ticketDate || Number.isNaN(ticketDate.getTime())) {
+          matchesFilter = false;
+        } else {
+          toDate.setHours(23, 59, 59, 999);
+          matchesFilter = ticketDate >= fromDate && ticketDate <= toDate;
+        }
+      }
+    } else if (selectedFilter !== "All Tickets" && selectedFilter !== "Custom Range") {
+      matchesFilter = normalizeTicketStatus(ticket.status) === normalizeTicketStatus(selectedFilter);
     }
 
     const matchesOffice = ticket.office === selectedOffice || selectedOffice === "Lahore";
 
     return matchesSearch && matchesFilter && matchesOffice;
   });
+
+  const officeMatchedTickets = useMemo(() => {
+    return tickets.filter((ticket) => ticket.office === selectedOffice || selectedOffice === "Lahore");
+  }, [tickets, selectedOffice]);
+
+  const filterCounts = useMemo(() => {
+    const counts = {
+      "All Tickets": officeMatchedTickets.length,
+      New: 0,
+      Pending: 0,
+      "In Progress": 0,
+      "Self Pay": 0,
+      Closed: 0,
+      Cancelled: 0,
+      "Next 15 Days": 0,
+      "Custom Range": 0,
+    };
+
+    officeMatchedTickets.forEach((ticket) => {
+      const normalizedStatus = String(ticket.status || "").trim();
+      if (Object.prototype.hasOwnProperty.call(counts, normalizedStatus)) {
+        counts[normalizedStatus] += 1;
+      }
+
+      if (isCourtDateInNextDays(ticket.courtDate, 15)) {
+        counts["Next 15 Days"] += 1;
+      }
+
+      if (customRangeFrom && customRangeTo) {
+        const ticketDate = ticket?.courtDate ? new Date(ticket.courtDate) : null;
+        const fromDate = new Date(customRangeFrom);
+        const toDate = new Date(customRangeTo);
+        toDate.setHours(23, 59, 59, 999);
+
+        if (ticketDate && !Number.isNaN(ticketDate.getTime()) && ticketDate >= fromDate && ticketDate <= toDate) {
+          counts["Custom Range"] += 1;
+        }
+      }
+    });
+
+    return counts;
+  }, [officeMatchedTickets, customRangeFrom, customRangeTo]);
 
   const memberTickets = useMemo(() => {
     if (!searchedMember) {
@@ -406,6 +489,47 @@ export default function TicketBoardPage() {
     setShowEditModal(true);
   };
 
+  const openEditTicketRoute = (ticket) => {
+    if (!ticket?._id) {
+      return;
+    }
+
+    setShowMemberTicketsModal(false);
+    navigate(`/ticket-board?editTicketId=${encodeURIComponent(ticket._id)}`);
+  };
+
+  useEffect(() => {
+    const ticketIdToEdit = new URLSearchParams(location.search).get("editTicketId");
+    if (!ticketIdToEdit || tickets.length === 0) {
+      return;
+    }
+
+    const ticket = tickets.find((item) => String(item._id) === String(ticketIdToEdit));
+    if (!ticket) {
+      return;
+    }
+
+    handleEditTicket(ticket);
+    navigate("/ticket-board", { replace: true });
+  }, [location.search, tickets, navigate]);
+
+  const applyCustomRangeFilter = () => {
+    if (!customRangeFromDraft || !customRangeToDraft) {
+      setBoardNotification({ text: "Select both From and To dates for custom range filter.", type: "error" });
+      return;
+    }
+
+    if (new Date(customRangeFromDraft) > new Date(customRangeToDraft)) {
+      setBoardNotification({ text: "From date cannot be after To date.", type: "error" });
+      return;
+    }
+
+    setCustomRangeFrom(customRangeFromDraft);
+    setCustomRangeTo(customRangeToDraft);
+    setSelectedFilter("Custom Range");
+    setShowCustomRangeModal(false);
+  };
+
   const handleEditInputChange = (event) => {
     const { name, value } = event.target;
     setEditFormData((prev) => ({ ...prev, [name]: value }));
@@ -603,8 +727,9 @@ export default function TicketBoardPage() {
       setShowCustomerProfileModal(true);
 
       let userData = null;
-      if (ticket?.memberId) {
-        const response = await apiRequest(`/api/users/${ticket.memberId}`);
+      const memberId = getEntityId(ticket?.memberId || ticket?.customerId);
+      if (memberId) {
+        const response = await apiRequest(`/api/users/${memberId}`);
         userData = response.user || null;
       }
 
@@ -677,14 +802,23 @@ export default function TicketBoardPage() {
                 {filterOptions.map((filter) => (
                   <button
                     key={filter}
-                    onClick={() => setSelectedFilter(filter)}
+                    onClick={() => {
+                      if (filter === "Custom Range") {
+                        setCustomRangeFromDraft(customRangeFrom);
+                        setCustomRangeToDraft(customRangeTo);
+                        setShowCustomRangeModal(true);
+                        return;
+                      }
+
+                      setSelectedFilter(filter);
+                    }}
                     className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition lg:px-3 lg:py-2 lg:text-sm ${
                       selectedFilter === filter
                         ? "border border-primary bg-primary/10 text-primary"
                         : "border border-slate-200 bg-slate-50 text-slate-700 hover:border-primary hover:bg-primary/5"
                     }`}
                   >
-                    {filter}
+                    {`${filter} (${filterCounts[filter] || 0})`}
                   </button>
                 ))}
               </div>
@@ -1166,6 +1300,7 @@ export default function TicketBoardPage() {
         onSearchChange={setMemberTicketSearch}
         isLoading={isMemberTicketsLoading}
         onEditTicket={handleEditTicket}
+        onNavigateToEditTicket={openEditTicketRoute}
       />
 
       {/* Delete Confirmation Modal */}
@@ -1367,7 +1502,7 @@ export default function TicketBoardPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-600">Portal Status</label>
+                    <label className="mb-1 block text-xs font-semibold text-slate-600">Ticket Status</label>
                     <select
                       name="status"
                       value={editFormData.status}
@@ -1512,6 +1647,9 @@ export default function TicketBoardPage() {
                         View current case result
                       </button>
                     )}
+                    {editFiles.caseResultPdf && (
+                      <p className="mt-1 text-xs font-semibold text-emerald-700">Selected: {editFiles.caseResultPdf.name}</p>
+                    )}
                   </div>
 
                   <div>
@@ -1533,6 +1671,9 @@ export default function TicketBoardPage() {
                       >
                         View current payment slip
                       </button>
+                    )}
+                    {editFiles.paymentSlip && (
+                      <p className="mt-1 text-xs font-semibold text-emerald-700">Selected: {editFiles.paymentSlip.name}</p>
                     )}
                   </div>
                 </div>
@@ -1577,6 +1718,69 @@ export default function TicketBoardPage() {
             </div>
             <div className="flex max-h-[80vh] items-center justify-center bg-slate-100 p-4">
               <img src={previewFile.url} alt={previewFile.name} className="max-h-[72vh] w-auto rounded-xl object-contain" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCustomRangeModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <h3 className="text-base font-semibold text-slate-900">Custom Date Range</h3>
+              <button
+                type="button"
+                onClick={() => setShowCustomRangeModal(false)}
+                className="rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">From</label>
+                <input
+                  type="date"
+                  value={customRangeFromDraft}
+                  onChange={(event) => setCustomRangeFromDraft(event.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">To</label>
+                <input
+                  type="date"
+                  value={customRangeToDraft}
+                  onChange={(event) => setCustomRangeToDraft(event.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomRangeFrom("");
+                    setCustomRangeTo("");
+                    setCustomRangeFromDraft("");
+                    setCustomRangeToDraft("");
+                    setSelectedFilter("All Tickets");
+                    setShowCustomRangeModal(false);
+                  }}
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={applyCustomRangeFilter}
+                  className="flex-1 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-secondary"
+                >
+                  Apply
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -118,6 +118,7 @@ export async function login(req, res, next) {
         isApprovedByAdmin: user.isApprovedByAdmin,
         paymentStatus: user.paymentStatus,
         paymentMethod: user.paymentMethod,
+        paymentCard: user.paymentCard,
         subscriptionStartAt: user.subscriptionStartAt,
         subscriptionEndAt: user.subscriptionEndAt,
       },

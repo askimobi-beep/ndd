@@ -16,6 +16,20 @@ export default function PaymentCheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CREDIT_CARD");
+  const [cardholderName, setCardholderName] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvv, setCardCvv] = useState("");
+  const [cardType, setCardType] = useState("CREDIT");
+
+  const deriveCardBrand = (value) => {
+    const digits = String(value || "").replace(/\D/g, "");
+    if (/^4/.test(digits)) return "VISA";
+    if (/^(5[1-5]|2[2-7])/.test(digits)) return "MASTERCARD";
+    if (/^3[47]/.test(digits)) return "AMEX";
+    if (/^(6011|65|64[4-9])/.test(digits)) return "DISCOVER";
+    return "";
+  };
 
   useEffect(() => {
     async function loadCheckout() {
@@ -46,9 +60,37 @@ export default function PaymentCheckoutPage() {
     try {
       setIsSubmitting(true);
       setError("");
+
+      if (paymentMethod === "CREDIT_CARD") {
+        const cardDigits = cardNumber.replace(/\D/g, "");
+        if (!cardholderName.trim() || cardDigits.length < 12 || !cardExpiry.trim() || !cardCvv.trim()) {
+          setError("Please enter complete card details before submitting payment.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      const cardBrand = deriveCardBrand(cardNumber);
+      const cardLast4 = cardNumber.replace(/\D/g, "").slice(-4);
+
       const data = await apiRequest(`/api/users/payment-checkout/${token}/submit`, {
         method: "POST",
-        body: JSON.stringify({ paymentMethod }),
+        body: JSON.stringify({
+          paymentMethod,
+          paymentCard:
+            paymentMethod === "CREDIT_CARD"
+              ? {
+                  brand: cardBrand,
+                  cardType,
+                  last4: cardLast4,
+                  cardNumber,
+                }
+              : {
+                  brand: "",
+                  cardType: "",
+                  last4: "",
+                },
+        }),
       });
 
       setSuccessMessage(data.message || "Payment submitted successfully");
@@ -185,12 +227,40 @@ export default function PaymentCheckoutPage() {
                   <span className="rounded bg-slate-100 px-2 py-1">AMEX</span>
                   <span className="rounded bg-slate-100 px-2 py-1">DISCOVER</span>
                 </div>
-                <input className="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none" placeholder="Cardholder's Name" />
+                <select
+                  value={cardType}
+                  onChange={(event) => setCardType(event.target.value)}
+                  className="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none"
+                >
+                  <option value="CREDIT">Credit Card</option>
+                  <option value="DEBIT">Debit Card</option>
+                </select>
+                <input
+                  value={cardholderName}
+                  onChange={(event) => setCardholderName(event.target.value)}
+                  className="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none"
+                  placeholder="Cardholder's Name"
+                />
                 <div className="rounded-2xl border border-slate-300 bg-white p-2">
-                  <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Card number" />
+                  <input
+                    value={cardNumber}
+                    onChange={(event) => setCardNumber(event.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
+                    placeholder="Card number"
+                  />
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="MM/YY" />
-                    <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="CVV" />
+                    <input
+                      value={cardExpiry}
+                      onChange={(event) => setCardExpiry(event.target.value)}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
+                      placeholder="MM/YY"
+                    />
+                    <input
+                      value={cardCvv}
+                      onChange={(event) => setCardCvv(event.target.value)}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
+                      placeholder="CVV"
+                    />
                   </div>
                 </div>
               </>

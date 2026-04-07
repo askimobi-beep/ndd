@@ -25,6 +25,7 @@ export default function MemberProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isTicketsLoading, setIsTicketsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedNoteTicket, setSelectedNoteTicket] = useState(null);
 
   const memberIdDisplay = new URLSearchParams(location.search).get("memberId") || "";
 
@@ -130,7 +131,7 @@ export default function MemberProfilePage() {
 
   const paymentCardLabel =
     member.paymentMethod === "CREDIT_CARD"
-      ? "VISA"
+      ? String(member?.paymentCard?.brand || "CARD").toUpperCase()
       : member.paymentMethod === "BANK_TRANSFER"
         ? "BANK"
         : null;
@@ -203,8 +204,8 @@ export default function MemberProfilePage() {
     return `${ticket?.assignedLawyer?.firstName || ""} ${ticket?.assignedLawyer?.lastName || ""}`.trim() || "-";
   };
 
-  const getTicketNotes = (ticket) => {
-    return ticket?.customerNotes || ticket?.teamNotes || ticket?.description || "-";
+  const getCustomerTicketNotes = (ticket) => {
+    return ticket?.customerNotes || ticket?.description || "No notes added";
   };
 
   return (
@@ -362,7 +363,7 @@ export default function MemberProfilePage() {
                       Card Number
                     </p>
                     <p className="mt-1 font-mono text-sm font-semibold tracking-[0.18em]">
-                      •••• •••• •••• ••••
+                      •••• •••• •••• {member?.paymentCard?.last4 || "••••"}
                     </p>
                   </div>
 
@@ -374,10 +375,10 @@ export default function MemberProfilePage() {
                       <p className="text-sm font-semibold">{fullName || "-"}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-white/60">
-                        Expiry
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-white/60">
+                          Card Type
                       </p>
-                      <p className="text-sm font-semibold">••/••</p>
+                        <p className="text-sm font-semibold">{member?.paymentCard?.cardType || "CREDIT"}</p>
                     </div>
                   </div>
                 </div>
@@ -489,7 +490,14 @@ export default function MemberProfilePage() {
                           <td className="px-4 py-4 text-slate-700">{ticket.courtName || "-"}</td>
                           <td className="px-4 py-4 text-slate-700">{getLawyerName(ticket)}</td>
                           <td className="max-w-[220px] px-4 py-4 text-slate-700">
-                            <p className="line-clamp-3">{getTicketNotes(ticket)}</p>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedNoteTicket(ticket)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                            >
+                              <DocumentTextIcon className="h-4 w-4" />
+                              View Notes
+                            </button>
                           </td>
                           <td className="px-4 py-4">
                             {caseResultFile ? (
@@ -549,6 +557,35 @@ export default function MemberProfilePage() {
 
         </div>
       </div>
+
+      {selectedNoteTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <h3 className="text-base font-semibold text-slate-900">Ticket Notes #{selectedNoteTicket.ticketId || "-"}</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedNoteTicket(null)}
+                className="rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <ArrowLeftIcon className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-3 p-4 text-sm">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Customer Notes</p>
+                <p className="mt-1 whitespace-pre-wrap text-slate-700">{getCustomerTicketNotes(selectedNoteTicket)}</p>
+              </div>
+              {!isMemberSelfView && (
+                <div className="rounded-xl border border-slate-200 bg-amber-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Team Notes</p>
+                  <p className="mt-1 whitespace-pre-wrap text-amber-800">{selectedNoteTicket.teamNotes || "No team note"}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

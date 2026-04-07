@@ -4,9 +4,11 @@ import {
   EnvelopeIcon,
   PhoneIcon,
   EllipsisHorizontalIcon,
+  XMarkIcon,
+  PencilSquareIcon,
 } from "@heroicons/react/24/outline";
 import TopNavbar from "../components/TopNavbar";
-import { apiRequest } from "../utils/api";
+import { API_BASE_URL, apiRequest } from "../utils/api";
 import { getAuthUser, hasAnyRole } from "../utils/auth";
 
 export default function PendingApprovalsPage() {
@@ -15,6 +17,23 @@ export default function PendingApprovalsPage() {
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState({ text: "", type: "success" });
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [editLicenseFile, setEditLicenseFile] = useState(null);
+  const [editLicenseFileName, setEditLicenseFileName] = useState("");
+  const [editFormData, setEditFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    office: "",
+    licenseNo: "",
+    dot: "",
+    state: "",
+    address: "",
+  });
 
   const loadMembers = useCallback(async () => {
     try {
@@ -72,6 +91,18 @@ export default function PendingApprovalsPage() {
     return "Payment Pending";
   };
 
+  const getFileUrl = (filePath) => {
+    if (!filePath) {
+      return "";
+    }
+
+    if (/^https?:\/\//i.test(filePath)) {
+      return filePath;
+    }
+
+    return `${API_BASE_URL}${String(filePath).startsWith("/") ? filePath : `/${filePath}`}`;
+  };
+
   const pendingMembers = records.filter((record) => {
     if (!record?.requiresAdminApproval || record?.isApprovedByAdmin) {
       return false;
@@ -115,6 +146,97 @@ export default function PendingApprovalsPage() {
       setNotification({ text: data.message || "User approved successfully", type: "success" });
     } catch (error) {
       setNotification({ text: error.message || "Unable to approve user", type: "error" });
+    }
+  };
+
+  const openDetailsModal = (record) => {
+    setSelectedRecord(record);
+    setIsDetailOpen(true);
+  };
+
+  const closeDetailsModal = () => {
+    setIsDetailOpen(false);
+    setSelectedRecord(null);
+  };
+
+  const openEditModal = (record) => {
+    setSelectedRecord(record);
+    setEditFormData({
+      firstName: record.firstName || "",
+      lastName: record.lastName || "",
+      email: record.email || "",
+      phone: record.phone || "",
+      office: record.office || "",
+      licenseNo: record.licenseNo || "",
+      dot: record.dot || "",
+      state: record.state || "",
+      address: record.address || "",
+    });
+    setEditLicenseFile(null);
+    setEditLicenseFileName("");
+    setIsEditOpen(true);
+  };
+
+  const handleEditChange = (event) => {
+    const { name, value } = event.target;
+    setEditFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditLicenseChange = (event) => {
+    const file = event.target.files?.[0] || null;
+    if (!file) {
+      setEditLicenseFile(null);
+      setEditLicenseFileName("");
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type) || file.size > 10 * 1024 * 1024) {
+      setNotification({ text: "License image must be JPG, JPEG, PNG or WEBP and under 10MB.", type: "error" });
+      event.target.value = "";
+      return;
+    }
+
+    setEditLicenseFile(file);
+    setEditLicenseFileName(file.name);
+  };
+
+  const submitEditMember = async (event) => {
+    event.preventDefault();
+    if (!selectedRecord?._id) {
+      return;
+    }
+
+    try {
+      setIsEditSubmitting(true);
+
+      const formData = new FormData();
+      Object.entries(editFormData).forEach(([key, value]) => {
+        formData.append(key, value || "");
+      });
+
+      if (editLicenseFile) {
+        formData.append("licenseDocuments", editLicenseFile);
+      }
+
+      const data = await apiRequest(`/api/users/${selectedRecord._id}`, {
+        method: "PATCH",
+        body: formData,
+      });
+
+      if (data.user) {
+        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
+        setSelectedRecord(data.user);
+      }
+
+      setNotification({ text: data.message || "Member updated successfully", type: "success" });
+      setIsEditOpen(false);
+      setEditLicenseFile(null);
+      setEditLicenseFileName("");
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to update member", type: "error" });
+    } finally {
+      setIsEditSubmitting(false);
     }
   };
 
@@ -251,7 +373,11 @@ export default function PendingApprovalsPage() {
                                 View Only
                               </span>
                             )}
-                            <button className="rounded-lg border border-slate-300 text-slate-700 px-3 py-2 text-xs font-semibold transition hover:border-primary hover:text-primary flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openDetailsModal(record)}
+                              className="rounded-lg border border-slate-300 text-slate-700 px-3 py-2 text-xs font-semibold transition hover:border-primary hover:text-primary flex items-center justify-center gap-1"
+                            >
                               <EllipsisHorizontalIcon className="h-4 w-4" />
                               View Details
                             </button>
@@ -278,6 +404,144 @@ export default function PendingApprovalsPage() {
           )}
         </div>
       </div>
+
+      {isDetailOpen && selectedRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+          <div className="w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+            <div className="flex items-center justify-between">
+              <h3 className="text-2xl font-semibold text-slate-900">Pending Member Details</h3>
+              <button
+                type="button"
+                onClick={closeDetailsModal}
+                className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-primary hover:text-primary"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div><p className="text-xs font-semibold text-slate-500">First Name</p><p className="text-sm text-slate-900">{selectedRecord.firstName || "-"}</p></div>
+              <div><p className="text-xs font-semibold text-slate-500">Last Name</p><p className="text-sm text-slate-900">{selectedRecord.lastName || "-"}</p></div>
+              <div><p className="text-xs font-semibold text-slate-500">Email</p><p className="text-sm text-slate-900 break-all">{selectedRecord.email || "-"}</p></div>
+              <div><p className="text-xs font-semibold text-slate-500">Phone</p><p className="text-sm text-slate-900">{selectedRecord.phone || "-"}</p></div>
+              <div><p className="text-xs font-semibold text-slate-500">Office</p><p className="text-sm text-slate-900">{selectedRecord.office || "-"}</p></div>
+              <div><p className="text-xs font-semibold text-slate-500">Plan</p><p className="text-sm text-slate-900">{selectedRecord.customerPlan || "INDIVIDUAL"}</p></div>
+              <div><p className="text-xs font-semibold text-slate-500">License No</p><p className="text-sm text-slate-900">{selectedRecord.licenseNo || "-"}</p></div>
+              <div><p className="text-xs font-semibold text-slate-500">DOT</p><p className="text-sm text-slate-900">{selectedRecord.dot || "-"}</p></div>
+              <div><p className="text-xs font-semibold text-slate-500">State</p><p className="text-sm text-slate-900">{selectedRecord.state || "-"}</p></div>
+              <div><p className="text-xs font-semibold text-slate-500">Address</p><p className="text-sm text-slate-900">{selectedRecord.address || "-"}</p></div>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">License</p>
+              <p className="mt-1 text-sm text-slate-900">{selectedRecord.licenseNo || "No license number"}</p>
+              {Array.isArray(selectedRecord.licenseFiles) && selectedRecord.licenseFiles.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => window.open(getFileUrl(selectedRecord.licenseFiles[0].url), "_blank", "noopener,noreferrer")}
+                  className="mt-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary"
+                >
+                  View License Pic
+                </button>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => openEditModal(selectedRecord)}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+              >
+                <PencilSquareIcon className="h-4 w-4" />
+                Edit Member
+              </button>
+              <button
+                type="button"
+                onClick={closeDetailsModal}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isEditOpen && selectedRecord && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/65 px-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+            <div className="flex items-center justify-between">
+              <h3 className="text-2xl font-semibold text-slate-900">Edit Pending Member</h3>
+              <button
+                type="button"
+                onClick={() => setIsEditOpen(false)}
+                className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-primary hover:text-primary"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={submitEditMember} className="mt-6 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">First Name</label>
+                  <input name="firstName" value={editFormData.firstName} onChange={handleEditChange} placeholder="First Name" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" required />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Last Name</label>
+                  <input name="lastName" value={editFormData.lastName} onChange={handleEditChange} placeholder="Last Name" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" required />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Email</label>
+                  <input name="email" value={editFormData.email} onChange={handleEditChange} placeholder="Email" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" required />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Phone</label>
+                  <input name="phone" value={editFormData.phone} onChange={handleEditChange} placeholder="Phone" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Office</label>
+                  <input name="office" value={editFormData.office} onChange={handleEditChange} placeholder="Office" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">License No</label>
+                  <input name="licenseNo" value={editFormData.licenseNo} onChange={handleEditChange} placeholder="License No" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">DOT</label>
+                  <input name="dot" value={editFormData.dot} onChange={handleEditChange} placeholder="DOT" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">State</label>
+                  <input name="state" value={editFormData.state} onChange={handleEditChange} placeholder="State" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Address</label>
+                <input name="address" value={editFormData.address} onChange={handleEditChange} placeholder="Address" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-primary focus:bg-white" />
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-700">License Image</p>
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <input id="pending-edit-license" type="file" accept="image/*" className="hidden" onChange={handleEditLicenseChange} />
+                  <label htmlFor="pending-edit-license" className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary">
+                    Upload License Pic
+                  </label>
+                  <p className="text-xs text-slate-500">{editLicenseFileName || "No file selected"}</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setIsEditOpen(false)} className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary">Cancel</button>
+                <button type="submit" disabled={isEditSubmitting} className="rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-70">
+                  {isEditSubmitting ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

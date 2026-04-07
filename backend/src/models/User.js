@@ -94,6 +94,23 @@ const userSchema = new mongoose.Schema(
       enum: ["NONE", "CREDIT_CARD", "BANK_TRANSFER"],
       default: "NONE",
     },
+    paymentCard: {
+      brand: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      cardType: {
+        type: String,
+        enum: ["", "CREDIT", "DEBIT"],
+        default: "",
+      },
+      last4: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+    },
     paymentSubmittedAt: {
       type: Date,
       default: null,
