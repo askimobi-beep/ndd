@@ -127,6 +127,10 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    subscriptionCancelledAt: {
+      type: Date,
+      default: null,
+    },
     invoices: [
       {
         invoiceNumber: {

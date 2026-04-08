@@ -175,15 +175,24 @@ export default function MemberPage() {
       return "PAID";
     }
 
+    if (status === "UNDER_REVIEW" || status === "DRAFT") {
+      return "DRAFT";
+    }
+
     if (status === "OVERDUE") {
       return "OVERDUE";
     }
 
-    if (status === "DRAFT") {
-      return "DRAFT";
+    return "UNPAID";
+  };
+
+  const isSubscriptionCancelled = (record) => {
+    if (!record?.subscriptionCancelledAt) {
+      return false;
     }
 
-    return "UNPAID";
+    const cancelledAt = new Date(record.subscriptionCancelledAt);
+    return !Number.isNaN(cancelledAt.getTime());
   };
 
   const filteredInvoiceRows = useMemo(() => {
@@ -353,9 +362,10 @@ export default function MemberPage() {
       }
 
       const normalizedPlan = String(record.customerPlan || "INDIVIDUAL").trim().toUpperCase();
+      const hasCancelledSubscription = isSubscriptionCancelled(record);
 
       if (quickFilter === "CANCELLED") {
-        if (record.isActive) return false;
+        if (!hasCancelledSubscription) return false;
         if (cancelledPlanFilter === "FLEET" && normalizedPlan !== "FLEET") return false;
         if (cancelledPlanFilter === "INDIVIDUAL" && normalizedPlan !== "INDIVIDUAL") return false;
       } else {
@@ -421,7 +431,7 @@ export default function MemberPage() {
   );
 
   const cancelledCount = useMemo(
-    () => records.filter((record) => !record.isActive).length,
+    () => records.filter((record) => isSubscriptionCancelled(record)).length,
     [records]
   );
 
@@ -436,12 +446,12 @@ export default function MemberPage() {
   );
 
   const cancelledFleetCount = useMemo(
-    () => records.filter((record) => !record.isActive && String(record.customerPlan || "INDIVIDUAL").trim().toUpperCase() === "FLEET").length,
+    () => records.filter((record) => isSubscriptionCancelled(record) && String(record.customerPlan || "INDIVIDUAL").trim().toUpperCase() === "FLEET").length,
     [records]
   );
 
   const cancelledIndividualCount = useMemo(
-    () => records.filter((record) => !record.isActive && String(record.customerPlan || "INDIVIDUAL").trim().toUpperCase() === "INDIVIDUAL").length,
+    () => records.filter((record) => isSubscriptionCancelled(record) && String(record.customerPlan || "INDIVIDUAL").trim().toUpperCase() === "INDIVIDUAL").length,
     [records]
   );
 
@@ -645,7 +655,7 @@ export default function MemberPage() {
       }
 
       setNotification({
-        text: data.user?.isActive ? "Member activated successfully" : "Member blocked successfully",
+        text: data.user?.isActive ? "Member activated successfully" : "Member blocked and subscription terminated",
         type: "success",
       });
     } catch (error) {
@@ -1090,8 +1100,8 @@ export default function MemberPage() {
                           </div>
                           <div className="space-y-1">
                             <p className="text-xs text-slate-500">Joined: {new Date(record.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                            {!record.isActive && (
-                              <p className="text-xs text-rose-600">Cancelled: {new Date(record.updatedAt || record.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                            {isSubscriptionCancelled(record) && (
+                              <p className="text-xs text-rose-600">Cancelled: {new Date(record.subscriptionCancelledAt || record.updatedAt || record.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                             )}
                           </div>
                         </div>
@@ -1195,9 +1205,10 @@ export default function MemberPage() {
                                       <button
                                         type="button"
                                         onClick={() => cancelMemberSubscription(record)}
-                                        className="mt-1 w-full rounded-lg bg-amber-500 px-2 py-1.5 text-left text-xs font-semibold text-white transition hover:bg-amber-600"
+                                        disabled={isSubscriptionCancelled(record)}
+                                        className={`mt-1 w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-white transition ${isSubscriptionCancelled(record) ? "cursor-not-allowed bg-slate-400" : "bg-amber-500 hover:bg-amber-600"}`}
                                       >
-                                        Cancel Subscription
+                                        {isSubscriptionCancelled(record) ? "Subscription Cancelled" : "Cancel Subscription"}
                                       </button>
                                     </>
                                   )}
@@ -1378,7 +1389,7 @@ export default function MemberPage() {
                   const memberId = memberIdByUserId[billingCustomer._id] || formatMemberId(1);
                   const subscription = getSubscriptionInsights(billingCustomer);
                   const isApprovalGranted = !billingCustomer.requiresAdminApproval || billingCustomer.isApprovedByAdmin;
-                  const accountIsActive = Boolean(billingCustomer.isActive && isApprovalGranted);
+                  const accountIsActive = Boolean(billingCustomer.isActive && isApprovalGranted && !isSubscriptionCancelled(billingCustomer));
 
                   return (
                     <>
@@ -1468,13 +1479,25 @@ export default function MemberPage() {
             )}
 
             {billingModalType === "INVOICE" && (
-              <div className="max-h-[88vh] overflow-y-auto rounded-3xl bg-[#f6f8fc]">
+              <div className="max-h-[88vh] overflow-y-auto rounded-3xl bg-accent/70">
                 <div className="border-b border-slate-200 bg-white px-6 py-5">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-4xl font-bold tracking-tight text-slate-900">Member Subscription Invoices</h3>
-                      <p className="mt-1 text-sm text-slate-500">Billing records for <span className="font-semibold text-primary">{`${billingCustomer.firstName || ""} ${billingCustomer.lastName || ""}`.trim() || "Member"}</span></p>
+                    <div className="flex items-start gap-3">
+                      <div className="relative">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-white shadow-md">
+                          <DocumentIcon className="h-6 w-6" />
+                        </div>
+                        <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white">
+                          {invoiceRows.length}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h3 className="text-[40px] font-bold leading-none tracking-tight text-slate-900">Customer Subscription Invoices</h3>
+                        <p className="mt-2 text-sm text-slate-600">Billing records for <span className="font-semibold text-primary">{`${billingCustomer.firstName || ""} ${billingCustomer.lastName || ""}`.trim() || "Customer"}</span></p>
+                      </div>
                     </div>
+
                     <button
                       type="button"
                       onClick={closeBillingModal}
@@ -1486,23 +1509,25 @@ export default function MemberPage() {
                 </div>
 
                 <div className="space-y-4 p-6">
-                  <div className="grid gap-3 lg:grid-cols-4">
+                  <div className="grid gap-3 md:grid-cols-4">
                     {[
-                      { key: "PAID", label: "PAID", tone: "border-emerald-500", bg: "bg-emerald-50", text: "text-emerald-600" },
-                      { key: "UNPAID", label: "UNPAID", tone: "border-amber-500", bg: "bg-amber-50", text: "text-amber-600" },
-                      { key: "OVERDUE", label: "OVERDUE", tone: "border-rose-500", bg: "bg-rose-50", text: "text-rose-600" },
-                      { key: "DRAFT", label: "DRAFT", tone: "border-slate-500", bg: "bg-slate-100", text: "text-slate-600" },
+                      { key: "PAID", label: "PAID", tone: "border-emerald-500", bg: "bg-emerald-100", text: "text-emerald-600", icon: CheckCircleIcon },
+                      { key: "UNPAID", label: "UNPAID", tone: "border-amber-500", bg: "bg-amber-100", text: "text-amber-600", icon: ExclamationCircleIcon },
+                      { key: "OVERDUE", label: "OVERDUE", tone: "border-rose-500", bg: "bg-rose-100", text: "text-rose-600", icon: XCircleIcon },
+                      { key: "DRAFT", label: "DRAFT", tone: "border-slate-500", bg: "bg-slate-200", text: "text-slate-700", icon: DocumentIcon },
                     ].map((card) => {
+                      const Icon = card.icon;
                       const count = invoiceRows.filter((row) => getInvoiceStatusCategory(row.status) === card.key).length;
+
                       return (
-                        <div key={card.key} className={`rounded-xl border-l-4 ${card.tone} bg-white p-4 shadow-sm`}>
+                        <div key={card.key} className={`rounded-xl border border-slate-200 border-l-4 ${card.tone} bg-white p-4 shadow-sm`}>
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="text-xs font-bold tracking-wide text-slate-500">{card.label}</p>
-                              <p className={`mt-1 text-4xl font-bold ${card.text}`}>{count}</p>
+                              <p className={`mt-1 text-4xl font-bold leading-none ${card.text}`}>{count}</p>
                             </div>
                             <div className={`rounded-xl p-3 ${card.bg}`}>
-                              <CheckCircleIcon className={`h-5 w-5 ${card.text}`} />
+                              <Icon className={`h-6 w-6 ${card.text}`} />
                             </div>
                           </div>
                         </div>
@@ -1548,14 +1573,14 @@ export default function MemberPage() {
                       <button
                         type="button"
                         onClick={() => openInvoiceModal(billingCustomer)}
-                        className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary"
+                        className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-secondary"
                       >
                         Refresh
                       </button>
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-sky-200 bg-white p-4 shadow-sm">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     {isInvoiceLoading ? (
                       <p className="py-10 text-center text-sm text-slate-500">Loading invoices...</p>
                     ) : filteredInvoiceRows.length === 0 ? (
@@ -1564,37 +1589,56 @@ export default function MemberPage() {
                       <div className="space-y-3">
                         {filteredInvoiceRows.map((row) => {
                           const statusCategory = getInvoiceStatusCategory(row.status);
+                          const statusPillClass = statusCategory === "PAID"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : statusCategory === "OVERDUE"
+                              ? "bg-rose-100 text-rose-700"
+                              : statusCategory === "DRAFT"
+                                ? "bg-slate-200 text-slate-700"
+                                : "bg-amber-100 text-amber-700";
+
                           return (
-                            <div key={row.invoiceNumber || row._id} className="rounded-xl border border-sky-200 bg-slate-50 p-3">
-                              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div key={row.invoiceNumber || row._id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                                 <div className="flex flex-1 items-start gap-3">
-                                  <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
-                                    <CheckCircleIcon className="h-4 w-4" />
+                                  <div className="rounded-xl bg-emerald-100 p-2 text-emerald-700">
+                                    <CheckCircleIcon className="h-5 w-5" />
                                   </div>
 
-                                  <div className="w-full space-y-2">
-                                    <div className="flex items-center gap-2 text-sm">
-                                      <span className="font-semibold text-slate-900">{new Date(row.issuedAt || Date.now()).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
-                                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusCategory === "PAID" ? "bg-emerald-100 text-emerald-700" : statusCategory === "OVERDUE" ? "bg-rose-100 text-rose-700" : statusCategory === "DRAFT" ? "bg-slate-200 text-slate-700" : "bg-amber-100 text-amber-700"}`}>
+                                  <div className="w-full">
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-2xl font-semibold text-slate-900">{new Date(row.issuedAt || Date.now()).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</p>
+                                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusPillClass}`}>
                                         {statusCategory}
                                       </span>
                                     </div>
 
-                                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                                      <p className="text-xs font-semibold text-slate-500">Invoice ID</p>
-                                      <p className="text-xs font-semibold text-slate-700">{row.invoiceNumber || "-"}</p>
-                                    </div>
+                                    <div className="mt-3 space-y-2">
+                                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <p className="text-sm font-semibold text-slate-700">Invoice ID</p>
+                                          <p className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500">{row.invoiceNumber || "-"}</p>
+                                        </div>
+                                      </div>
 
-                                    <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
-                                      <p className="text-xs font-semibold text-sky-700">Payment ID</p>
-                                      <p className="text-xs font-semibold text-sky-800">{row._id || row.paymentId || "-"}</p>
+                                      <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <p className="text-sm font-semibold text-primary">Payment ID</p>
+                                          <p className="rounded-md bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-500">{row._id || row.paymentId || "-"}</p>
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
 
-                                <div className="text-right">
-                                  <p className="text-2xl font-bold text-slate-900">${Number(row.amount || 0).toFixed(2)}</p>
-                                  <p className="text-xs font-semibold text-slate-500">USD</p>
+                                <div className="flex min-w-[110px] items-center gap-2 self-end text-right lg:self-center">
+                                  <div className="rounded-xl bg-emerald-100 p-2 text-emerald-700">
+                                    <span className="text-lg font-black leading-none">$</span>
+                                  </div>
+                                  <div>
+                                    <p className="text-4xl font-extrabold leading-none text-slate-900">{Number(row.amount || 0).toFixed(2)}</p>
+                                    <p className="mt-1 text-xs font-semibold uppercase text-slate-500">USD</p>
+                                  </div>
                                 </div>
                               </div>
                             </div>

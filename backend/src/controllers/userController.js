@@ -24,6 +24,7 @@ const PLAN_PRICES = {
   FLEET: 44.99,
 };
 const PROCESSING_FEE = 0;
+const BILLING_CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const CREATABLE_ROLES = {
   ADMIN: ["SUPERVISOR", "TICKET CHECKER", "LAWYER", "CUSTOMER"],
@@ -585,6 +586,18 @@ export async function listUsers(req, res, next) {
       .populate("supervisorId", "firstName lastName email role")
       .sort({ createdAt: -1 });
 
+    await Promise.all(
+      users.map(async (user) => {
+        if (normalizeRole(user.role) !== "CUSTOMER") {
+          return;
+        }
+
+        if (ensureRecurringCustomerInvoices(user)) {
+          await user.save();
+        }
+      })
+    );
+
     return res.json({
       count: users.length,
       users,
@@ -726,7 +739,9 @@ export async function updateUserStatus(req, res, next) {
     user.isActive = nextIsActive;
 
     if (!nextIsActive && normalizeRole(user.role) === "CUSTOMER") {
-      user.subscriptionEndAt = new Date();
+      const now = new Date();
+      user.subscriptionEndAt = now;
+      user.subscriptionCancelledAt = now;
     }
 
     await user.save();
@@ -929,6 +944,69 @@ function ensureCurrentInvoice(customer) {
   return customer.invoices[customer.invoices.length - 1];
 }
 
+function ensureRecurringCustomerInvoices(customer, referenceDate = new Date()) {
+  const paymentStatus = normalizeRole(customer?.paymentStatus);
+  if (!customer || !["PAID_APPROVED", "UNDER_REVIEW"].includes(paymentStatus)) {
+    return false;
+  }
+
+  if (customer.subscriptionCancelledAt) {
+    return false;
+  }
+
+  const startedAt = customer.subscriptionStartAt ? new Date(customer.subscriptionStartAt) : null;
+  if (!startedAt || Number.isNaN(startedAt.getTime())) {
+    return false;
+  }
+
+  if (!Array.isArray(customer.invoices)) {
+    customer.invoices = [];
+  }
+
+  let changed = false;
+  let cycleEndAt = customer.subscriptionEndAt ? new Date(customer.subscriptionEndAt) : null;
+
+  if (!cycleEndAt || Number.isNaN(cycleEndAt.getTime()) || cycleEndAt.getTime() <= startedAt.getTime()) {
+    cycleEndAt = new Date(startedAt.getTime() + BILLING_CYCLE_MS);
+    customer.subscriptionEndAt = cycleEndAt;
+    changed = true;
+  }
+
+  const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+  const planSummary = getPlanAmountSummary(customer?.customerPlan);
+  let safetyCounter = 0;
+
+  while (now.getTime() >= cycleEndAt.getTime() && safetyCounter < 24) {
+    const cycleBoundaryTime = cycleEndAt.getTime();
+    const hasInvoiceForCycleBoundary = customer.invoices.some((entry) => {
+      const issuedTime = new Date(entry?.issuedAt || 0).getTime();
+      return Number.isFinite(issuedTime) && Math.abs(issuedTime - cycleBoundaryTime) < 60 * 1000;
+    });
+
+    if (!hasInvoiceForCycleBoundary) {
+      customer.invoices.push({
+        invoiceNumber: createInvoiceNumber(customer._id),
+        amount: planSummary.totalAmount,
+        status: "UNPAID",
+        paymentMethod: "NONE",
+        issuedAt: new Date(cycleBoundaryTime),
+        paidAt: null,
+      });
+      changed = true;
+    }
+
+    const nextCycleStart = new Date(cycleBoundaryTime);
+    const nextCycleEnd = new Date(cycleBoundaryTime + BILLING_CYCLE_MS);
+    customer.subscriptionStartAt = nextCycleStart;
+    customer.subscriptionEndAt = nextCycleEnd;
+    cycleEndAt = nextCycleEnd;
+    changed = true;
+    safetyCounter += 1;
+  }
+
+  return changed;
+}
+
 function normalizePaymentMethod(value = "") {
   const normalized = String(value || "").trim().toUpperCase();
   if (normalized === "CREDIT_CARD" || normalized === "BANK_TRANSFER") {
@@ -1097,12 +1175,16 @@ export async function getPaymentCheckoutDetails(req, res, next) {
     }
 
     const customer = await User.findById(payload.customerId).select(
-      "firstName lastName email phone office createdAt customerPlan paymentStatus paymentMethod paymentCard paymentSubmittedAt subscriptionStartAt subscriptionEndAt invoices"
+      "firstName lastName email phone office createdAt customerPlan paymentStatus paymentMethod paymentCard paymentSubmittedAt subscriptionStartAt subscriptionEndAt subscriptionCancelledAt invoices"
     );
 
     if (!customer) {
       res.status(404);
       throw new Error("Customer not found");
+    }
+
+    if (ensureRecurringCustomerInvoices(customer)) {
+      await customer.save();
     }
 
     const planSummary = getPlanAmountSummary(customer.customerPlan);
@@ -1160,6 +1242,7 @@ export async function submitPaymentCheckout(req, res, next) {
     customer.isApprovedByAdmin = false;
     customer.subscriptionStartAt = now;
     customer.subscriptionEndAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    customer.subscriptionCancelledAt = null;
 
     const openInvoice = ensureCurrentInvoice(customer);
     openInvoice.status = "UNDER_REVIEW";
@@ -1235,13 +1318,7 @@ export async function cancelCustomerSubscription(req, res, next) {
 
     const now = new Date();
     customer.subscriptionEndAt = now;
-    customer.isActive = false;
-
-    const latestInvoice = getLatestOpenInvoice(customer);
-    if (latestInvoice && String(latestInvoice.status || "").toUpperCase() !== "PAID") {
-      latestInvoice.status = "CANCELLED";
-      latestInvoice.paidAt = null;
-    }
+    customer.subscriptionCancelledAt = now;
 
     await customer.save();
 
@@ -1249,7 +1326,7 @@ export async function cancelCustomerSubscription(req, res, next) {
     await customer.populate("supervisorId", "firstName lastName email role");
 
     return res.json({
-      message: "Subscription cancelled and member deactivated",
+      message: "Subscription cancelled successfully",
       user: customer,
     });
   } catch (error) {
@@ -1270,6 +1347,10 @@ export async function getCustomerInvoices(req, res, next) {
 
     if (!canManageCustomerPayment(req, customer) && !["ADMIN", "TICKET CHECKER"].includes(normalizeRole(req.user?.role))) {
       return res.status(403).json({ message: "Forbidden: insufficient permissions" });
+    }
+
+    if (ensureRecurringCustomerInvoices(customer)) {
+      await customer.save();
     }
 
     const invoices = Array.isArray(customer.invoices) ? [...customer.invoices].reverse() : [];
