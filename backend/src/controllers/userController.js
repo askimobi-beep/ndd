@@ -1175,7 +1175,7 @@ export async function getPaymentCheckoutDetails(req, res, next) {
     }
 
     const customer = await User.findById(payload.customerId).select(
-      "firstName lastName email phone office createdAt customerPlan paymentStatus paymentMethod paymentCard paymentSubmittedAt subscriptionStartAt subscriptionEndAt subscriptionCancelledAt invoices"
+      "firstName lastName email phone office createdAt customerPlan paymentStatus paymentMethod paymentCard paymentSubmittedAt subscriptionStartAt subscriptionEndAt subscriptionCancelledAt subscriptionCancellationCount invoices"
     );
 
     if (!customer) {
@@ -1319,6 +1319,7 @@ export async function cancelCustomerSubscription(req, res, next) {
     const now = new Date();
     customer.subscriptionEndAt = now;
     customer.subscriptionCancelledAt = now;
+    customer.subscriptionCancellationCount = (customer.subscriptionCancellationCount || 0) + 1;
 
     await customer.save();
 
@@ -1327,6 +1328,46 @@ export async function cancelCustomerSubscription(req, res, next) {
 
     return res.json({
       message: "Subscription cancelled successfully",
+      user: customer,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function unCancelCustomerSubscription(req, res, next) {
+  try {
+    const customer = await User.findById(req.params.id)
+      .populate("createdBy", "firstName lastName email role")
+      .populate("supervisorId", "firstName lastName email role");
+
+    if (!customer || normalizeRole(customer.role) !== "CUSTOMER") {
+      res.status(404);
+      throw new Error("Customer not found");
+    }
+
+    const now = new Date();
+    customer.subscriptionCancelledAt = null;
+    customer.subscriptionEndAt = new Date(now.getTime() + BILLING_CYCLE_MS);
+
+    // Create a new invoice for the re-activated subscription
+    const planSummary = getPlanAmountSummary(customer?.customerPlan);
+    customer.invoices.push({
+      invoiceNumber: createInvoiceNumber(customer._id),
+      amount: planSummary.totalAmount,
+      status: "UNPAID",
+      paymentMethod: "NONE",
+      issuedAt: now,
+      paidAt: null,
+    });
+
+    await customer.save();
+
+    await customer.populate("createdBy", "firstName lastName email role");
+    await customer.populate("supervisorId", "firstName lastName email role");
+
+    return res.json({
+      message: "Subscription reactivated successfully. New invoice created.",
       user: customer,
     });
   } catch (error) {
@@ -1364,6 +1405,84 @@ export async function getCustomerInvoices(req, res, next) {
   }
 }
 
+export async function assignAgentToCustomer(req, res, next) {
+  try {
+    if (normalizeRole(req.user?.role) !== "ADMIN") {
+      return res.status(403).json({ message: "Forbidden: only admins can assign agents" });
+    }
+
+    const customer = await User.findById(req.params.id);
+    if (!customer || normalizeRole(customer.role) !== "CUSTOMER") {
+      res.status(404);
+      throw new Error("Customer not found");
+    }
+
+    const agentId = String(req.body?.agentId || "").trim();
+    if (!agentId) {
+      res.status(400);
+      throw new Error("agentId is required");
+    }
+
+    const agent = await User.findById(agentId);
+    if (!agent || normalizeRole(agent.role) !== "AGENT") {
+      res.status(404);
+      throw new Error("Agent not found");
+    }
+
+    customer.createdBy = agent._id;
+    customer.supervisorId = agent.createdBy || null;
+    await customer.save();
+
+    await customer.populate("createdBy", "firstName lastName email role");
+    await customer.populate("supervisorId", "firstName lastName email role");
+
+    return res.json({
+      message: "Agent assigned to customer successfully",
+      user: customer,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function assignSupervisorToAgent(req, res, next) {
+  try {
+    if (normalizeRole(req.user?.role) !== "ADMIN") {
+      return res.status(403).json({ message: "Forbidden: only admins can assign supervisors" });
+    }
+
+    const agent = await User.findById(req.params.id);
+    if (!agent || normalizeRole(agent.role) !== "AGENT") {
+      res.status(404);
+      throw new Error("Agent not found");
+    }
+
+    const supervisorId = String(req.body?.supervisorId || "").trim();
+    if (!supervisorId) {
+      res.status(400);
+      throw new Error("supervisorId is required");
+    }
+
+    const supervisor = await User.findById(supervisorId);
+    if (!supervisor || normalizeRole(supervisor.role) !== "SUPERVISOR") {
+      res.status(404);
+      throw new Error("Supervisor not found");
+    }
+
+    agent.createdBy = supervisor._id;
+    await agent.save();
+
+    await agent.populate("createdBy", "firstName lastName email role");
+
+    return res.json({
+      message: "Supervisor assigned to agent successfully",
+      user: agent,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function deleteUser(req, res, next) {
   try {
     if (normalizeRole(req.user?.role) !== "ADMIN") {
@@ -1383,6 +1502,38 @@ export async function deleteUser(req, res, next) {
 
     if (normalizeRole(user.role) === "CUSTOMER") {
       return res.status(400).json({ message: "Members cannot be deleted once they are added" });
+    }
+
+    if (normalizeRole(user.role) === "AGENT") {
+      await User.updateMany(
+        { role: "CUSTOMER", createdBy: user._id },
+        {
+          $set: {
+            createdBy: null,
+            supervisorId: null,
+          },
+        }
+      );
+    }
+
+    if (normalizeRole(user.role) === "SUPERVISOR") {
+      await User.updateMany(
+        { role: "AGENT", createdBy: user._id },
+        {
+          $set: {
+            createdBy: null,
+          },
+        }
+      );
+
+      await User.updateMany(
+        { role: "CUSTOMER", supervisorId: user._id },
+        {
+          $set: {
+            supervisorId: null,
+          },
+        }
+      );
     }
 
     await user.deleteOne();

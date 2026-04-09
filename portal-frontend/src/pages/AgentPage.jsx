@@ -4,6 +4,7 @@ import {
   PencilSquareIcon,
   PlusIcon,
   XCircleIcon,
+  UserPlusIcon,
 } from "@heroicons/react/24/outline";
 import TopNavbar from "../components/TopNavbar";
 import RegisterUserModal from "../components/RegisterUserModal";
@@ -36,6 +37,13 @@ export default function AgentPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingRecord, setDeletingRecord] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showAssignSupervisorModal, setShowAssignSupervisorModal] = useState(false);
+  const [assigningAgent, setAssigningAgent] = useState(null);
+  const [assignableSupervisors, setAssignableSupervisors] = useState([]);
+  const [assignSupervisorSearch, setAssignSupervisorSearch] = useState("");
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState("");
+  const [isAssignSupervisorsLoading, setIsAssignSupervisorsLoading] = useState(false);
+  const [isAssigningSupervisor, setIsAssigningSupervisor] = useState(false);
   const [formData, setFormData] = useState({
     userRole: "AGENT",
     office: "Lahore Office (LHR)",
@@ -231,6 +239,85 @@ export default function AgentPage() {
     }
   };
 
+  const openAssignSupervisorModal = async (record) => {
+    try {
+      setShowAssignSupervisorModal(true);
+      setAssigningAgent(record);
+      setAssignSupervisorSearch("");
+      setSelectedSupervisorId("");
+      setIsAssignSupervisorsLoading(true);
+
+      const data = await apiRequest("/api/users?role=SUPERVISOR");
+      const availableSupervisors = Array.isArray(data.users)
+        ? data.users.filter((supervisor) => Boolean(supervisor?.isActive))
+        : [];
+
+      setAssignableSupervisors(availableSupervisors);
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to load supervisors", type: "error" });
+      setShowAssignSupervisorModal(false);
+      setAssigningAgent(null);
+    } finally {
+      setIsAssignSupervisorsLoading(false);
+    }
+  };
+
+  const closeAssignSupervisorModal = () => {
+    setShowAssignSupervisorModal(false);
+    setAssigningAgent(null);
+    setAssignableSupervisors([]);
+    setAssignSupervisorSearch("");
+    setSelectedSupervisorId("");
+    setIsAssignSupervisorsLoading(false);
+    setIsAssigningSupervisor(false);
+  };
+
+  const filteredAssignableSupervisors = useMemo(() => {
+    const query = String(assignSupervisorSearch || "").trim().toLowerCase();
+    if (!query) {
+      return assignableSupervisors;
+    }
+
+    return assignableSupervisors.filter((supervisor) => {
+      const fullName = `${supervisor.firstName || ""} ${supervisor.lastName || ""}`.trim().toLowerCase();
+      const email = String(supervisor.email || "").toLowerCase();
+      return fullName.includes(query) || email.includes(query);
+    });
+  }, [assignableSupervisors, assignSupervisorSearch]);
+
+  const assignSupervisorToAgent = async () => {
+    if (!assigningAgent?._id || !selectedSupervisorId) {
+      setNotification({ text: "Please select a supervisor", type: "error" });
+      return;
+    }
+
+    try {
+      setIsAssigningSupervisor(true);
+      const data = await apiRequest(`/api/users/${assigningAgent._id}/assign-supervisor`, {
+        method: "PATCH",
+        body: JSON.stringify({ supervisorId: selectedSupervisorId }),
+      });
+
+      if (data.user) {
+        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
+      }
+
+      const selectedSupervisor = assignableSupervisors.find((supervisor) => String(supervisor._id) === String(selectedSupervisorId));
+      const supervisorName = `${selectedSupervisor?.firstName || ""} ${selectedSupervisor?.lastName || ""}`.trim() || selectedSupervisor?.email || "Supervisor";
+      const agentName = `${assigningAgent?.firstName || ""} ${assigningAgent?.lastName || ""}`.trim() || "Agent";
+
+      setNotification({
+        text: data.message || `${supervisorName} assigned to ${agentName} successfully`,
+        type: "success",
+      });
+      closeAssignSupervisorModal();
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to assign supervisor", type: "error" });
+    } finally {
+      setIsAssigningSupervisor(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-accent">
       <TopNavbar />
@@ -312,7 +399,14 @@ export default function AgentPage() {
                         <td className="px-4 py-3 text-slate-700">
                           {record.createdBy
                             ? `${record.createdBy.firstName || ""} ${record.createdBy.lastName || ""}`.trim() || record.createdBy.email || "-"
-                            : "-"}
+                            : "Unassigned"}
+                          <div className="mt-1">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${record.createdBy ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
+                            >
+                              {record.createdBy ? "Assigned" : "Unassigned"}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-slate-700">{record.phone || "-"}</td>
                         <td className="px-4 py-3 text-slate-700">{record.office || "-"}</td>
@@ -363,6 +457,15 @@ export default function AgentPage() {
                                 className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-700"
                               >
                                 Delete
+                              </button>
+                            )}
+                            {canApproveUsers && !record.createdBy && (
+                              <button
+                                onClick={() => openAssignSupervisorModal(record)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700"
+                              >
+                                <UserPlusIcon className="h-4 w-4" />
+                                Assign Supervisor
                               </button>
                             )}
                           </div>
@@ -478,6 +581,67 @@ export default function AgentPage() {
                   className="flex-1 rounded-xl bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
                 >
                   {isDeleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAssignSupervisorModal && assigningAgent && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Assign Supervisor - {`${assigningAgent.firstName || ""} ${assigningAgent.lastName || ""}`.trim() || "Agent"}
+              </h3>
+            </div>
+            <div className="space-y-4 p-5">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Search Supervisor</label>
+                <input
+                  type="text"
+                  value={assignSupervisorSearch}
+                  onChange={(event) => setAssignSupervisorSearch(event.target.value)}
+                  placeholder="Search by name or email"
+                  disabled={isAssignSupervisorsLoading || isAssigningSupervisor}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-100"
+                />
+              </div>
+
+              <label className="block text-sm font-semibold text-slate-700">Select Supervisor</label>
+              <select
+                value={selectedSupervisorId}
+                onChange={(event) => setSelectedSupervisorId(event.target.value)}
+                disabled={isAssignSupervisorsLoading || isAssigningSupervisor}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="">Choose a supervisor</option>
+                {filteredAssignableSupervisors.map((supervisor) => (
+                  <option key={supervisor._id} value={supervisor._id}>
+                    {`${supervisor.firstName || ""} ${supervisor.lastName || ""}`.trim() || supervisor.email || "Supervisor"}
+                  </option>
+                ))}
+              </select>
+
+              {!isAssignSupervisorsLoading && filteredAssignableSupervisors.length === 0 && (
+                <p className="text-xs text-slate-500">No active supervisors available for assignment.</p>
+              )}
+
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={closeAssignSupervisorModal}
+                  disabled={isAssigningSupervisor}
+                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={assignSupervisorToAgent}
+                  disabled={!selectedSupervisorId || isAssigningSupervisor || isAssignSupervisorsLoading}
+                  className="flex-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isAssigningSupervisor ? "Assigning..." : "Assign"}
                 </button>
               </div>
             </div>

@@ -15,6 +15,29 @@ function toNullableString(value) {
   return normalized ? normalized : null;
 }
 
+async function validateApprovedLawyerId(lawyerId) {
+  const normalizedLawyerId = toNullableString(lawyerId);
+
+  if (!normalizedLawyerId) {
+    return null;
+  }
+
+  const lawyer = await User.findById(normalizedLawyerId).select("role isApprovedByAdmin").lean();
+  if (!lawyer || normalizeRole(lawyer.role) !== "LAWYER") {
+    const error = new Error("Assigned lawyer not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (!lawyer.isApprovedByAdmin) {
+    const error = new Error("Only admin-approved lawyers can be assigned to tickets");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return normalizedLawyerId;
+}
+
 function mapFile(file) {
   if (!file) {
     return null;
@@ -185,6 +208,8 @@ export async function createTicket(req, res, next) {
     const memberDetails = await getMemberFallbackDetails(memberId);
     const fallbackName = `${memberDetails?.firstName || ""} ${memberDetails?.lastName || ""}`.trim() || null;
 
+    const assignedLawyer = await validateApprovedLawyerId(req.body.assignedLawyer);
+
     const payload = {
       memberId,
       customerName: toNullableString(req.body.customerName) || fallbackName,
@@ -198,7 +223,7 @@ export async function createTicket(req, res, next) {
       ticketType: toNullableString(req.body.ticketType) || "Ticket",
       status: toNullableString(req.body.status) || "New",
       paymentStatus: toNullableString(req.body.paymentStatus) || "Unpaid",
-      assignedLawyer: toNullableString(req.body.assignedLawyer),
+      assignedLawyer,
       customerNotes: toNullableString(req.body.customerNotes),
       teamNotes: toNullableString(req.body.teamNotes),
       description: toNullableString(req.body.description),
@@ -215,6 +240,10 @@ export async function createTicket(req, res, next) {
       ticket,
     });
   } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+
     if (error?.code === 11000) {
       return res.status(409).json({ message: error.message || "Ticket ID already exists" });
     }
@@ -244,7 +273,7 @@ export async function updateTicket(req, res, next) {
       ticketType: toNullableString(req.body.ticketType),
       status: toNullableString(req.body.status),
       paymentStatus: toNullableString(req.body.paymentStatus),
-      assignedLawyer: toNullableString(req.body.assignedLawyer),
+      assignedLawyer: undefined,
       customerNotes: toNullableString(req.body.customerNotes),
       teamNotes: toNullableString(req.body.teamNotes),
       description: toNullableString(req.body.description),
@@ -252,6 +281,10 @@ export async function updateTicket(req, res, next) {
 
     if (req.body.courtDate !== undefined) {
       patch.courtDate = req.body.courtDate ? new Date(req.body.courtDate) : null;
+    }
+
+    if (req.body.assignedLawyer !== undefined) {
+      patch.assignedLawyer = await validateApprovedLawyerId(req.body.assignedLawyer);
     }
 
     Object.entries(patch).forEach(([key, value]) => {
@@ -299,6 +332,9 @@ export async function updateTicket(req, res, next) {
       ticket,
     });
   } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     return next(error);
   }
 }

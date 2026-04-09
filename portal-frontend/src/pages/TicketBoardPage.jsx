@@ -114,7 +114,8 @@ export default function TicketBoardPage() {
   const loadLawyers = async () => {
     try {
       const data = await apiRequest("/api/users?role=LAWYER");
-      setLawyers(Array.isArray(data.users) ? data.users : []);
+      const allLawyers = Array.isArray(data.users) ? data.users : [];
+      setLawyers(allLawyers.filter((lawyer) => Boolean(lawyer?.isApprovedByAdmin)));
     } catch {
       setLawyers([]);
     }

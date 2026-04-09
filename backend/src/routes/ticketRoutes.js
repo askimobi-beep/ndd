@@ -21,7 +21,7 @@ router
 router
   .route("/:id")
   .get(authorizeRoles("ADMIN", "TICKET CHECKER", "SUPERVISOR", "AGENT", "CUSTOMER"), getTicketById)
-  .patch(authorizeRoles("ADMIN", "TICKET CHECKER"), uploadTicketFiles, updateTicket)
+  .patch(authorizeRoles("TICKET CHECKER"), uploadTicketFiles, updateTicket)
   .delete(authorizeRoles("ADMIN", "TICKET CHECKER"), deleteTicket);
 
 export default router;

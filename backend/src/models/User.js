@@ -131,6 +131,10 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    subscriptionCancellationCount: {
+      type: Number,
+      default: 0,
+    },
     invoices: [
       {
         invoiceNumber: {

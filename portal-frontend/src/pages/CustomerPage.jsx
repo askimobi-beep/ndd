@@ -10,6 +10,7 @@ import {
   PhoneIcon,
   DocumentIcon,
   EllipsisHorizontalIcon,
+  UserPlusIcon,
 } from "@heroicons/react/24/outline";
 import MemberTicketsModal from "../components/MemberTicketsModal";
 import TopNavbar from "../components/TopNavbar";
@@ -70,6 +71,13 @@ export default function MemberPage() {
   const [memberTicketsRows, setMemberTicketsRows] = useState([]);
   const [memberTicketsCustomer, setMemberTicketsCustomer] = useState(null);
   const [memberTicketsSearch, setMemberTicketsSearch] = useState("");
+  const [showAssignAgentModal, setShowAssignAgentModal] = useState(false);
+  const [assigningCustomer, setAssigningCustomer] = useState(null);
+  const [assignableAgents, setAssignableAgents] = useState([]);
+  const [assignAgentSearch, setAssignAgentSearch] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [isAssignAgentsLoading, setIsAssignAgentsLoading] = useState(false);
+  const [isAssigningAgent, setIsAssigningAgent] = useState(false);
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState("ALL");
   const [dateFilter, setDateFilter] = useState("ALL");
@@ -683,6 +691,24 @@ export default function MemberPage() {
     }
   };
 
+  const unCancelMemberSubscription = async (record) => {
+    try {
+      const data = await apiRequest(`/api/users/${record._id}/uncancel-subscription`, {
+        method: "PATCH",
+      });
+
+      if (data.user) {
+        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
+      }
+
+      setNotification({ text: data.message || "Subscription reactivated successfully", type: "success" });
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to reactivate subscription", type: "error" });
+    } finally {
+      setMoreActionsMemberId("");
+    }
+  };
+
   const openPaymentMethodModal = (record) => {
     setMoreActionsMemberId("");
     setBillingCustomer(record);
@@ -741,6 +767,85 @@ export default function MemberPage() {
       setMemberTicketsCustomer(null);
     } finally {
       setIsMemberTicketsLoading(false);
+    }
+  };
+
+  const openAssignAgentModal = async (record) => {
+    try {
+      setShowAssignAgentModal(true);
+      setAssigningCustomer(record);
+      setAssignAgentSearch("");
+      setSelectedAgentId("");
+      setIsAssignAgentsLoading(true);
+
+      const data = await apiRequest("/api/users?role=AGENT");
+      const availableAgents = Array.isArray(data.users)
+        ? data.users.filter((agent) => Boolean(agent?.isActive))
+        : [];
+
+      setAssignableAgents(availableAgents);
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to load agents", type: "error" });
+      setShowAssignAgentModal(false);
+      setAssigningCustomer(null);
+    } finally {
+      setIsAssignAgentsLoading(false);
+    }
+  };
+
+  const closeAssignAgentModal = () => {
+    setShowAssignAgentModal(false);
+    setAssigningCustomer(null);
+    setAssignableAgents([]);
+    setAssignAgentSearch("");
+    setSelectedAgentId("");
+    setIsAssignAgentsLoading(false);
+    setIsAssigningAgent(false);
+  };
+
+  const filteredAssignableAgents = useMemo(() => {
+    const query = String(assignAgentSearch || "").trim().toLowerCase();
+    if (!query) {
+      return assignableAgents;
+    }
+
+    return assignableAgents.filter((agent) => {
+      const fullName = `${agent.firstName || ""} ${agent.lastName || ""}`.trim().toLowerCase();
+      const email = String(agent.email || "").toLowerCase();
+      return fullName.includes(query) || email.includes(query);
+    });
+  }, [assignableAgents, assignAgentSearch]);
+
+  const assignAgentToCustomer = async () => {
+    if (!assigningCustomer?._id || !selectedAgentId) {
+      setNotification({ text: "Please select an agent", type: "error" });
+      return;
+    }
+
+    try {
+      setIsAssigningAgent(true);
+      const data = await apiRequest(`/api/users/${assigningCustomer._id}/assign-agent`, {
+        method: "PATCH",
+        body: JSON.stringify({ agentId: selectedAgentId }),
+      });
+
+      if (data.user) {
+        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
+      }
+
+      const selectedAgent = assignableAgents.find((agent) => String(agent._id) === String(selectedAgentId));
+      const selectedAgentName = `${selectedAgent?.firstName || ""} ${selectedAgent?.lastName || ""}`.trim() || selectedAgent?.email || "Agent";
+      const customerName = `${assigningCustomer?.firstName || ""} ${assigningCustomer?.lastName || ""}`.trim() || "Customer";
+
+      setNotification({
+        text: data.message || `${selectedAgentName} assigned to ${customerName} successfully`,
+        type: "success",
+      });
+      closeAssignAgentModal();
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to assign agent", type: "error" });
+    } finally {
+      setIsAssigningAgent(false);
     }
   };
 
@@ -1012,6 +1117,17 @@ export default function MemberPage() {
                           {record.createdBy && (
                             <div>
                               <p className="text-xs font-semibold text-slate-600">Agent: {`${record.createdBy.firstName || ""} ${record.createdBy.lastName || ""}`.trim() || record.createdBy.email || "-"}</p>
+                              <span className="mt-1 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                Assigned
+                              </span>
+                            </div>
+                          )}
+                          {!record.createdBy && (
+                            <div>
+                              <p className="text-xs font-semibold text-amber-700">Agent: Unassigned</p>
+                              <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                Unassigned
+                              </span>
                             </div>
                           )}
                         </div>
@@ -1149,6 +1265,16 @@ export default function MemberPage() {
                               Tickets
                             </button>
                           )}
+                          {isAdmin && !record.createdBy && (
+                            <button
+                              type="button"
+                              onClick={() => openAssignAgentModal(record)}
+                              className="inline-flex items-center justify-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700"
+                            >
+                              <UserPlusIcon className="h-3.5 w-3.5" />
+                              Assign Agent
+                            </button>
+                          )}
                           {canConfirmPayment && record.paymentStatus === "UNDER_REVIEW" && (
                             <button
                               type="button"
@@ -1197,19 +1323,18 @@ export default function MemberPage() {
                                     <>
                                       <button
                                         type="button"
-                                        onClick={() => toggleMemberBlockStatus(record)}
-                                        className={`mt-1 w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-white transition ${record.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                                        onClick={() => (isSubscriptionCancelled(record) ? unCancelMemberSubscription(record) : cancelMemberSubscription(record))}
+                                        className={`mt-1 w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-white transition ${isSubscriptionCancelled(record) ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-500 hover:bg-amber-600"}`}
                                       >
-                                        {record.isActive ? "Block Member" : "Activate Member"}
+                                        {isSubscriptionCancelled(record) ? "Reactivate Subscription" : "Cancel Subscription"}
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => cancelMemberSubscription(record)}
-                                        disabled={isSubscriptionCancelled(record)}
-                                        className={`mt-1 w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-white transition ${isSubscriptionCancelled(record) ? "cursor-not-allowed bg-slate-400" : "bg-amber-500 hover:bg-amber-600"}`}
-                                      >
-                                        {isSubscriptionCancelled(record) ? "Subscription Cancelled" : "Cancel Subscription"}
-                                      </button>
+                                      {record?.subscriptionCancellationCount > 0 && (
+                                        <div className="mt-1 flex items-center justify-center rounded-lg bg-slate-100 px-2 py-1.5">
+                                          <span className="text-xs font-semibold text-slate-600">
+                                            Cancelled {record.subscriptionCancellationCount} {record.subscriptionCancellationCount === 1 ? "time" : "times"}
+                                          </span>
+                                        </div>
+                                      )}
                                     </>
                                   )}
                                 </div>
@@ -1678,6 +1803,7 @@ export default function MemberPage() {
         search={memberTicketsSearch}
         onSearchChange={setMemberTicketsSearch}
         isLoading={isMemberTicketsLoading}
+        userRole={user?.role}
         onNavigateToEditTicket={(ticket) => {
           if (!ticket?._id) {
             return;
@@ -1687,6 +1813,77 @@ export default function MemberPage() {
           navigate(`/ticket-board?editTicketId=${encodeURIComponent(ticket._id)}`);
         }}
       />
+
+      {showAssignAgentModal && assigningCustomer && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Assign Agent - {`${assigningCustomer.firstName || ""} ${assigningCustomer.lastName || ""}`.trim() || "Customer"}
+              </h3>
+              <button
+                type="button"
+                onClick={closeAssignAgentModal}
+                className="rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <XCircleIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Search Agent</label>
+                <input
+                  type="text"
+                  value={assignAgentSearch}
+                  onChange={(event) => setAssignAgentSearch(event.target.value)}
+                  placeholder="Search by name or email"
+                  disabled={isAssignAgentsLoading || isAssigningAgent}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-100"
+                />
+              </div>
+
+              <label className="block text-sm font-semibold text-slate-700">Select Agent</label>
+              <select
+                value={selectedAgentId}
+                onChange={(event) => setSelectedAgentId(event.target.value)}
+                disabled={isAssignAgentsLoading || isAssigningAgent}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="">Choose an agent</option>
+                {filteredAssignableAgents.map((agent) => (
+                  <option key={agent._id} value={agent._id}>
+                    {`${agent.firstName || ""} ${agent.lastName || ""}`.trim() || agent.email || "Agent"}
+                  </option>
+                ))}
+              </select>
+
+              {!isAssignAgentsLoading && filteredAssignableAgents.length === 0 && (
+                <p className="text-xs text-slate-500">No active agents available for assignment.</p>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeAssignAgentModal}
+                  disabled={isAssigningAgent}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={assignAgentToCustomer}
+                  disabled={!selectedAgentId || isAssigningAgent || isAssignAgentsLoading}
+                  className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isAssigningAgent ? "Assigning..." : "Assign Agent"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/55 p-3 sm:p-6">

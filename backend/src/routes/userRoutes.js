@@ -14,6 +14,9 @@ import {
   getPaymentCheckoutDetails,
   submitPaymentCheckout,
   cancelCustomerSubscription,
+  unCancelCustomerSubscription,
+  assignAgentToCustomer,
+  assignSupervisorToAgent,
   deleteUser,
   getUserById,
   listUsers,
@@ -43,6 +46,8 @@ router.post("/agents", authorizeRoles("SUPERVISOR"), createAgent);
 router.post("/customers", authorizeRoles("ADMIN", "AGENT"), uploadLicenseFiles, createCustomer);
 router.post("/customers/fleet", authorizeRoles("AGENT"), createFleetCustomers);
 router.post("/:id/claim", authorizeRoles("AGENT"), claimCustomer);
+router.patch("/:id/assign-agent", authorizeRoles("ADMIN"), assignAgentToCustomer);
+router.patch("/:id/assign-supervisor", authorizeRoles("ADMIN"), assignSupervisorToAgent);
 router.get("/:id/payment-link", authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), generateCustomerPaymentLink);
 router.post("/:id/payment-link/email", authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), sendCustomerPaymentInvoiceEmail);
 router
@@ -59,5 +64,6 @@ router.route("/:id/approval").patch(authorizeRoles("ADMIN"), updateUserApproval)
 router.route("/:id/payment-confirmation").patch(authorizeRoles("ADMIN"), confirmCustomerPayment);
 router.route("/:id/invoices").get(authorizeRoles("ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"), getCustomerInvoices);
 router.route("/:id/cancel-subscription").patch(authorizeRoles("ADMIN"), cancelCustomerSubscription);
+router.route("/:id/uncancel-subscription").patch(authorizeRoles("ADMIN"), unCancelCustomerSubscription);
 
 export default router;

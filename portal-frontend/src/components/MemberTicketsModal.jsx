@@ -4,6 +4,11 @@ import {
   EllipsisVerticalIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
+  EyeIcon,
+  PencilIcon,
+  ArrowLeftIcon,
+  PhotoIcon,
+  DocumentTextIcon,
 } from "@heroicons/react/24/outline";
 
 function getCreatedByName(ticket) {
@@ -12,6 +17,53 @@ function getCreatedByName(ticket) {
 
 function getMemberName(member) {
   return `${member?.firstName || ""} ${member?.lastName || ""}`.trim() || "Customer";
+}
+
+function getLawyerName(ticket) {
+  return `${ticket?.assignedLawyer?.firstName || ""} ${ticket?.assignedLawyer?.lastName || ""}`.trim() || "-";
+}
+
+function getCustomerTicketNotes(ticket) {
+  return ticket?.customerNotes || ticket?.description || "No notes added";
+}
+
+function getFileUrl(filePath) {
+  if (!filePath) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(filePath)) {
+    return filePath;
+  }
+
+  const baseURL = window.location.origin;
+  return `${baseURL}${String(filePath).startsWith("/") ? filePath : `/${filePath}`}`;
+}
+
+function formatDate(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getPreviewFile(ticket) {
+  const candidates = [ticket?.paymentSlipFile, ticket?.caseResultFile, ...(ticket?.ticketDocuments || [])].filter(Boolean);
+  return candidates.find((file) => {
+    const mimeType = String(file?.mimeType || "").toLowerCase();
+    const url = String(file?.url || "");
+    return mimeType.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(url);
+  }) || null;
 }
 
 export default function MemberTicketsModal({
@@ -24,9 +76,13 @@ export default function MemberTicketsModal({
   isLoading,
   onEditTicket,
   onNavigateToEditTicket,
+  userRole,
 }) {
   const [activeActionTicketId, setActiveActionTicketId] = useState("");
   const [selectedTeamNoteTicket, setSelectedTeamNoteTicket] = useState(null);
+  const [selectedNoteType, setSelectedNoteType] = useState("team");
+  const [viewingTicket, setViewingTicket] = useState(null);
+  const isTicketChecker = userRole === "TICKET CHECKER";
 
   if (!isOpen) {
     return null;
@@ -88,13 +144,13 @@ export default function MemberTicketsModal({
         </div>
 
         <div className="max-h-[78vh] overflow-y-auto">
-          <div className="grid grid-cols-[1.1fr_1.3fr_0.8fr_0.9fr_1.2fr_0.5fr] gap-4 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 lg:px-6">
+          <div className={`grid ${isTicketChecker ? 'grid-cols-[1.1fr_1.3fr_0.8fr_0.9fr_0.8fr_0.7fr]' : 'grid-cols-[1.1fr_1.3fr_0.8fr_0.9fr_0.8fr]'} gap-4 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 lg:px-6`}>
             <p>Ticket Id</p>
             <p>Created By</p>
             <p>Type</p>
             <p>Payment Status</p>
-            <p>Team Note</p>
-            <p className="text-right">Actions</p>
+            <p>View</p>
+            {isTicketChecker && <p className="text-right">Actions</p>}
           </div>
 
           {isLoading ? (
@@ -105,7 +161,7 @@ export default function MemberTicketsModal({
             visibleTickets.map((ticket) => (
               <div
                 key={ticket._id}
-                className="grid grid-cols-[1.1fr_1.3fr_0.8fr_0.9fr_1.2fr_0.5fr] items-center gap-4 border-b border-slate-100 px-4 py-4 text-sm last:border-b-0 lg:px-6"
+                className={`grid ${isTicketChecker ? 'grid-cols-[1.1fr_1.3fr_0.8fr_0.9fr_0.8fr_0.7fr]' : 'grid-cols-[1.1fr_1.3fr_0.8fr_0.9fr_0.8fr]'} items-center gap-4 border-b border-slate-100 px-4 py-4 text-sm last:border-b-0 lg:px-6`}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-slate-400">⌄</span>
@@ -144,41 +200,32 @@ export default function MemberTicketsModal({
                 <div>
                   <button
                     type="button"
-                    onClick={() => setSelectedTeamNoteTicket(ticket)}
-                    className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                    onClick={() => setViewingTicket(ticket)}
+                    className="flex items-center gap-1 rounded-lg bg-blue-500 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600"
                   >
+                    <EyeIcon className="h-3.5 w-3.5" />
                     View
                   </button>
                 </div>
 
-                <div className="relative text-right">
-                  <button
-                    type="button"
-                    onClick={() => setActiveActionTicketId((prev) => (prev === ticket._id ? "" : ticket._id))}
-                    className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                  >
-                    <EllipsisVerticalIcon className="h-5 w-5" />
-                  </button>
-
-                  {activeActionTicketId === ticket._id && (
-                    <div className="absolute right-0 z-20 mt-1 w-36 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onNavigateToEditTicket) {
-                            onNavigateToEditTicket(ticket);
-                          } else {
-                            onEditTicket?.(ticket);
-                          }
-                          setActiveActionTicketId("");
-                        }}
-                        className="w-full rounded-md px-2.5 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                      >
-                        Edit Ticket
-                      </button>
-                    </div>
-                  )}
-                </div>
+                {isTicketChecker && (
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onNavigateToEditTicket) {
+                          onNavigateToEditTicket(ticket);
+                        } else {
+                          onEditTicket?.(ticket);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary"
+                    >
+                      <PencilIcon className="h-3.5 w-3.5" />
+                      Edit
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -186,13 +233,18 @@ export default function MemberTicketsModal({
       </div>
 
       {selectedTeamNoteTicket && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/65 p-4">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/65 p-4">
           <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h4 className="text-sm font-semibold text-slate-900">Team Note - Ticket #{selectedTeamNoteTicket.ticketId || "-"}</h4>
+              <h4 className="text-sm font-semibold text-slate-900">
+                {selectedNoteType === "customer" ? "Customer Note" : "Team Note"} - Ticket #{selectedTeamNoteTicket.ticketId || "-"}
+              </h4>
               <button
                 type="button"
-                onClick={() => setSelectedTeamNoteTicket(null)}
+                onClick={() => {
+                  setSelectedTeamNoteTicket(null);
+                  setSelectedNoteType("team");
+                }}
                 className="rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
               >
                 <XMarkIcon className="h-4 w-4" />
@@ -200,8 +252,221 @@ export default function MemberTicketsModal({
             </div>
             <div className="p-4">
               <p className="whitespace-pre-wrap text-sm text-slate-700">
-                {selectedTeamNoteTicket.teamNotes || "No team note"}
+                {selectedNoteType === "customer"
+                  ? getCustomerTicketNotes(selectedTeamNoteTicket)
+                  : (selectedTeamNoteTicket.teamNotes || "No team note")}
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TICKET VIEWING MODAL ── */}
+      {viewingTicket && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/65 p-5 overflow-y-auto">
+          <div className="w-full max-w-7xl rounded-3xl border border-slate-200 bg-white shadow-2xl my-8">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-10 py-7">
+              <div>
+                <h3 className="text-3xl font-bold text-slate-900">Ticket #{viewingTicket.ticketId || "-"}</h3>
+                <p className="mt-1.5 text-base font-medium text-slate-600">{getCreatedByName(viewingTicket)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingTicket(null)}
+                className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="max-h-[calc(100vh-200px)] overflow-y-auto p-10">
+              {/* 3-Column Grid Layout */}
+              <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+                {/* Left Column: Images & Files */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 shadow-sm">
+                  <h4 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-900">
+                    <PhotoIcon className="h-5 w-5 text-blue-600" />
+                    Images & Files
+                    {(() => {
+                      const files = [
+                        getPreviewFile(viewingTicket),
+                        viewingTicket?.caseResultFile,
+                        ...(viewingTicket?.ticketDocuments || [])
+                      ].filter(Boolean);
+                      return files.length > 0 ? (
+                        <span className="ml-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                          {files.length} file{files.length !== 1 ? 's' : ''}
+                        </span>
+                      ) : null;
+                    })()}
+                  </h4>
+                  <div className="space-y-3">
+                    {(() => {
+                      const previewFile = getPreviewFile(viewingTicket);
+                      return previewFile ? (
+                        <button
+                          type="button"
+                          onClick={() => window.open(getFileUrl(previewFile.url), "_blank")}
+                          className="group relative w-full overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-primary"
+                        >
+                          <img
+                            src={getFileUrl(previewFile.url)}
+                            alt={previewFile.originalName || "Ticket preview"}
+                            className="h-56 w-full object-cover transition group-hover:opacity-75"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/0 transition group-hover:bg-slate-900/50 group-hover:opacity-100">
+                            <span className="text-white text-xs font-semibold opacity-0 group-hover:opacity-100">View</span>
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="flex h-56 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-400">
+                          <PhotoIcon className="h-7 w-7" />
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Middle Column: Court Details */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 shadow-sm">
+                  <h4 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-900">
+                    <DocumentTextIcon className="h-5 w-5 text-violet-600" />
+                    Court Details
+                  </h4>
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Court Date</p>
+                      <p className="mt-1.5 text-base font-semibold text-slate-900">{formatDate(viewingTicket.courtDate)}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Court Name</p>
+                      <p className="mt-1.5 text-base font-semibold text-slate-900">{viewingTicket.courtName || "-"}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assigned Lawyer</p>
+                      <p className="mt-1.5 text-base font-semibold text-slate-900">{getLawyerName(viewingTicket)}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                      <div className="mt-1.5">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold ${
+                            viewingTicket.status === "Closed"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : viewingTicket.status === "Cancelled"
+                                ? "bg-rose-100 text-rose-700"
+                                : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {viewingTicket.status || "PENDING"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Notes & Documents */}
+                <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 shadow-sm">
+                  {/* Customer Notes */}
+                  <div>
+                    <h4 className="mb-2 text-sm font-bold text-slate-900">Customer Notes</h4>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedNoteType("customer");
+                        setSelectedTeamNoteTicket(viewingTicket);
+                      }}
+                      className="w-full flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:bg-slate-100"
+                    >
+                      <p className="text-sm text-slate-600 flex-1">{getCustomerTicketNotes(viewingTicket)}</p>
+                      <span className="flex-shrink-0 ml-2">
+                        <DocumentTextIcon className="h-4 w-4 text-slate-400" />
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Team Notes */}
+                  <div>
+                    <h4 className="mb-2 text-sm font-bold text-slate-900">Team Notes</h4>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:bg-slate-100"
+                      onClick={() => {
+                        setSelectedNoteType("team");
+                        setSelectedTeamNoteTicket(viewingTicket);
+                      }}
+                    >
+                      <p className="text-sm text-slate-600 flex-1">{viewingTicket.teamNotes || "No notes available"}</p>
+                      <span className="flex-shrink-0 ml-2">
+                        <DocumentTextIcon className="h-4 w-4 text-slate-400" />
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Case Documents */}
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+                    <h4 className="flex items-center gap-2 text-base font-bold text-orange-900 mb-4">
+                      <DocumentTextIcon className="h-5 w-5" />
+                      Case Documents
+                    </h4>
+                    {(() => {
+                      const caseResultFile = viewingTicket?.caseResultFile?.url ? viewingTicket.caseResultFile : null;
+                      const documents = Array.isArray(viewingTicket?.ticketDocuments) ? viewingTicket.ticketDocuments : [];
+                      
+                      if (!caseResultFile && documents.length === 0) {
+                        return (
+                          <div className="rounded-lg border border-dashed border-orange-200 bg-white p-4 text-center">
+                              <p className="text-xs text-slate-600">N/A</p>
+                              <p className="text-xs text-slate-500">Upload a PDF file</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2">
+                          {caseResultFile && (
+                            <button
+                              type="button"
+                              onClick={() => window.open(getFileUrl(caseResultFile.url), "_blank")}
+                              className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-primary hover:bg-slate-50"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <DocumentTextIcon className="h-4 w-4 text-slate-400" />
+                                  <div className="text-xs">
+                                    <p className="font-medium text-slate-700">{caseResultFile.originalName || "Case Result"}</p>
+                                  </div>
+                                </div>
+                                <span className="text-xs font-semibold text-primary">View</span>
+                              </div>
+                            </button>
+                          )}
+                          {documents.map((doc, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => window.open(getFileUrl(doc.url), "_blank")}
+                              className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-primary hover:bg-slate-50"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <DocumentTextIcon className="h-4 w-4 text-slate-400" />
+                                  <div className="text-xs">
+                                    <p className="font-medium text-slate-700">{doc.originalName || `Document ${idx + 1}`}</p>
+                                  </div>
+                                </div>
+                                <span className="text-xs font-semibold text-primary">View</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

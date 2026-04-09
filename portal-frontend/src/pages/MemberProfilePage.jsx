@@ -9,6 +9,10 @@ import {
   BuildingLibraryIcon,
   DocumentTextIcon,
   PhotoIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  EyeIcon,
+  PencilIcon,
 } from "@heroicons/react/24/outline";
 import TopNavbar from "../components/TopNavbar";
 import { API_BASE_URL, apiRequest } from "../utils/api";
@@ -20,12 +24,15 @@ export default function MemberProfilePage() {
   const location = useLocation();
   const authUser = getAuthUser();
   const isMemberSelfView = hasAnyRole(authUser?.role, ["CUSTOMER"]) && !id;
+  const isTicketChecker = hasAnyRole(authUser?.role, ["TICKET CHECKER"]);
   const [member, setMember] = useState(null);
   const [tickets, setTickets] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isTicketsLoading, setIsTicketsLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedNoteTicket, setSelectedNoteTicket] = useState(null);
+  const [expandedTicketId, setExpandedTicketId] = useState(null);
+  const [viewingTicket, setViewingTicket] = useState(null);
 
   const memberIdDisplay = new URLSearchParams(location.search).get("memberId") || "";
 
@@ -430,128 +437,245 @@ export default function MemberProfilePage() {
           </div>
 
           {/* ── CASES / TICKETS ── */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 px-6 py-4">
-              <h2 className="text-base font-bold text-slate-900">Cases / Tickets</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50">
-                    {ticketColumns.map((h) => (
-                      <th
-                        key={h}
-                        className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {isTicketsLoading ? (
-                    <tr>
-                      <td colSpan={ticketColumns.length} className="px-6 py-10 text-center text-sm text-slate-400">
-                        Loading tickets...
-                      </td>
-                    </tr>
-                  ) : tickets.length > 0 ? (
-                    tickets.map((ticket) => {
-                      const previewFile = getPreviewFile(ticket);
-                      const caseResultFile = ticket?.caseResultFile?.url ? ticket.caseResultFile : null;
-                      const primaryTicketFile = Array.isArray(ticket?.ticketDocuments) && ticket.ticketDocuments.length
-                        ? ticket.ticketDocuments[0]
-                        : null;
-
-                      return (
-                        <tr key={ticket._id} className="border-t border-slate-100 align-top">
-                          <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-800">#{ticket.ticketId || "-"}</td>
-                          <td className="px-4 py-4">
-                            {previewFile ? (
-                              <button
-                                type="button"
-                                onClick={() => openFile(previewFile)}
-                                className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 transition hover:border-primary"
-                              >
-                                <img
-                                  src={getFileUrl(previewFile.url)}
-                                  alt={previewFile.originalName || "Ticket preview"}
-                                  className="h-full w-full object-cover"
-                                />
-                              </button>
-                            ) : (
-                              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
-                                <PhotoIcon className="h-5 w-5" />
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-slate-700">{getCreatedByName(ticket)}</td>
-                          <td className="whitespace-nowrap px-4 py-4 text-slate-700">{formatDate(ticket.courtDate)}</td>
-                          <td className="px-4 py-4 text-slate-700">{ticket.courtName || "-"}</td>
-                          <td className="px-4 py-4 text-slate-700">{getLawyerName(ticket)}</td>
-                          <td className="max-w-[220px] px-4 py-4 text-slate-700">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-4">
+                <h2 className="text-base font-bold text-slate-900">Cases / Tickets</h2>
+              </div>
+              {isTicketsLoading ? (
+                <div className="px-6 py-10 text-center text-sm text-slate-400">
+                  Loading tickets...
+                </div>
+              ) : tickets.length > 0 ? (
+                <div className="divide-y divide-slate-100">
+                  {tickets.map((ticket) => (
+                    <div key={ticket._id}>
+                      {/* ── TICKET LIST ITEM (COLLAPSED VIEW) ── */}
+                      <div className="flex items-center justify-between px-6 py-4 transition hover:bg-slate-50">
+                        <div className="flex flex-1 items-center gap-4">
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-slate-900"># {ticket.ticketId || "-"}</p>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs text-slate-500 uppercase tracking-wide">Created By</p>
+                            <p className="text-sm font-medium text-slate-700">{getCreatedByName(ticket)}</p>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs text-slate-500 uppercase tracking-wide">Type</p>
+                            <p className="text-sm font-medium text-slate-700">Ticket</p>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs text-slate-500 uppercase tracking-wide">Payment Status</p>
+                            <div className="mt-0.5">
+                              <span className="inline-flex rounded-full bg-rose-100 px-3 py-1 text-xs font-bold text-rose-700">
+                                Unpaid
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="ml-4 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setViewingTicket(ticket)}
+                            className="flex items-center gap-1 rounded-lg bg-blue-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
+                          >
+                            <EyeIcon className="h-4 w-4" />
+                            View
+                          </button>
+                          {isTicketChecker && (
                             <button
                               type="button"
-                              onClick={() => setSelectedNoteTicket(ticket)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+                            onClick={() => navigate(`/ticket-board?ticketId=${viewingTicket._id}`)}
+                              className="flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition hover:bg-secondary"
                             >
-                              <DocumentTextIcon className="h-4 w-4" />
-                              View Notes
+                              <PencilIcon className="h-4 w-4" />
+                              Edit
                             </button>
-                          </td>
-                          <td className="px-4 py-4">
-                            {caseResultFile ? (
-                              <button
-                                type="button"
-                                onClick={() => openFile(caseResultFile)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
-                              >
-                                <DocumentTextIcon className="h-4 w-4" />
-                                View Result
-                              </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setExpandedTicketId(expandedTicketId === ticket._id ? null : ticket._id)}
+                            className="ml-2 flex items-center"
+                          >
+                            {expandedTicketId === ticket._id ? (
+                              <ChevronUpIcon className="h-5 w-5 text-slate-400" />
                             ) : (
-                              <span className="text-slate-400">-</span>
+                              <ChevronDownIcon className="h-5 w-5 text-slate-400" />
                             )}
-                          </td>
-                          <td className="px-4 py-4">
-                            <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
-                                ticket.status === "Closed"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : ticket.status === "Cancelled"
-                                    ? "bg-rose-100 text-rose-700"
-                                    : "bg-amber-100 text-amber-700"
-                              }`}
-                            >
-                              {ticket.status || "-"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4">
-                            {primaryTicketFile ? (
-                              <button
-                                type="button"
-                                onClick={() => openFile(primaryTicketFile)}
-                                className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-secondary"
-                              >
-                                <DocumentTextIcon className="h-4 w-4" />
-                                Open
-                              </button>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr className="border-t border-slate-100">
-                      {ticketColumns.map((column) => (
-                        <td key={column} className="px-4 py-6 text-slate-300">-</td>
-                      ))}
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* ── TICKET DETAILS (EXPANDED VIEW) ── */}
+                      {expandedTicketId === ticket._id && (
+                        <div className="border-t border-slate-100 px-6 py-6">
+                          <div className="space-y-6">
+                            {/* Images & Files */}
+                            <div>
+                              <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-4">
+                                <PhotoIcon className="h-5 w-5" />
+                                Images & Files
+                              </h3>
+                              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                                {(() => {
+                                  const previewFile = getPreviewFile(ticket);
+                                  return previewFile ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openFile(previewFile)}
+                                      className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 hover:border-primary"
+                                    >
+                                      <img
+                                        src={getFileUrl(previewFile.url)}
+                                        alt={previewFile.originalName || "Ticket preview"}
+                                        className="h-32 w-full object-cover transition group-hover:opacity-75"
+                                      />
+                                      <div className="absolute inset-0 flex items-center justify-center bg-slate-900/0 transition group-hover:bg-slate-900/50 group-hover:opacity-100">
+                                        <span className="text-white text-xs font-semibold opacity-0 group-hover:opacity-100">View</span>
+                                      </div>
+                                    </button>
+                                  ) : (
+                                    <div className="flex h-32 items-center justify-center rounded-xl border border-slate-200 border-dashed bg-slate-50 text-slate-400">
+                                      <PhotoIcon className="h-6 w-6" />
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+
+                            {/* Court Details */}
+                            <div>
+                              <h3 className="text-base font-bold text-slate-900 mb-4">Court Details</h3>
+                              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Court Date</p>
+                                  <p className="mt-1 text-sm font-medium text-slate-700">{formatDate(ticket.courtDate)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Court Name</p>
+                                  <p className="mt-1 text-sm font-medium text-slate-700">{ticket.courtName || "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assigned Lawyer</p>
+                                  <p className="mt-1 text-sm font-medium text-slate-700">{getLawyerName(ticket)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                                  <div className="mt-1">
+                                    <span
+                                      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                                        ticket.status === "Closed"
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : ticket.status === "Cancelled"
+                                            ? "bg-rose-100 text-rose-700"
+                                            : "bg-yellow-100 text-yellow-700"
+                                      }`}
+                                    >
+                                      {ticket.status || "PENDING"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Notes & Documents */}
+                            <div>
+                              <h3 className="text-base font-bold text-slate-900 mb-4">Notes & Documents</h3>
+                              <div className="space-y-3">
+                                <div className="rounded-xl border border-slate-200 bg-blue-50 p-4">
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Customer Notes</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedNoteTicket(ticket)}
+                                    className="mt-2 inline-flex items-center gap-2 rounded-lg border border-blue-300 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                                  >
+                                    <DocumentTextIcon className="h-4 w-4" />
+                                    Click to view notes
+                                  </button>
+                                </div>
+                                {!isMemberSelfView && (
+                                  <div className="rounded-xl border border-slate-200 bg-amber-50 p-4">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Team Notes</p>
+                                    <p className="mt-2 text-sm text-amber-800">{ticket.teamNotes || "No notes available"}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Case Documents */}
+                            <div>
+                              <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-4">
+                                <DocumentTextIcon className="h-5 w-5" />
+                                Case Documents
+                              </h3>
+                              <div className="space-y-2">
+                                {(() => {
+                                  const caseResultFile = ticket?.caseResultFile?.url ? ticket.caseResultFile : null;
+                                  const documents = Array.isArray(ticket?.ticketDocuments) ? ticket.ticketDocuments : [];
+                                  
+                                  if (!caseResultFile && documents.length === 0) {
+                                    return (
+                                      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                                        <p className="text-sm text-slate-500">Upload a PDF file</p>
+                                      </div>
+                                    );
+                                  }
+
+                                  return (
+                                    <>
+                                      {caseResultFile && (
+                                        <button
+                                          type="button"
+                                          onClick={() => openFile(caseResultFile)}
+                                          className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-primary hover:bg-slate-50"
+                                        >
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                              <DocumentTextIcon className="h-5 w-5 text-slate-400" />
+                                              <div>
+                                                <p className="text-sm font-semibold text-slate-700">{caseResultFile.originalName || "Case Result"}</p>
+                                                <p className="text-xs text-slate-500">PDF Document</p>
+                                              </div>
+                                            </div>
+                                            <span className="text-xs font-semibold text-primary">View</span>
+                                          </div>
+                                        </button>
+                                      )}
+                                      {documents.map((doc, idx) => (
+                                        <button
+                                          key={idx}
+                                          type="button"
+                                          onClick={() => openFile(doc)}
+                                          className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-primary hover:bg-slate-50"
+                                        >
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                              <DocumentTextIcon className="h-5 w-5 text-slate-400" />
+                                              <div>
+                                                <p className="text-sm font-semibold text-slate-700">{doc.originalName || `Document ${idx + 1}`}</p>
+                                                <p className="text-xs text-slate-500">{doc.mimeType || "Document"}</p>
+                                              </div>
+                                            </div>
+                                            <span className="text-xs font-semibold text-primary">View</span>
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-6 py-10 text-center">
+                  <p className="text-sm text-slate-400">No tickets found</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -582,6 +706,183 @@ export default function MemberProfilePage() {
                   <p className="mt-1 whitespace-pre-wrap text-amber-800">{selectedNoteTicket.teamNotes || "No team note"}</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TICKET VIEWING MODAL ── */}
+      {viewingTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
+          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl my-8">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Ticket #{viewingTicket.ticketId || "-"}</h3>
+                <p className="mt-0.5 text-sm text-slate-500">{getCreatedByName(viewingTicket)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingTicket(null)}
+                className="rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <ArrowLeftIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="max-h-[calc(100vh-200px)] overflow-y-auto p-6 space-y-6">
+              {/* First Row: Images & Files | Court Details */}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {/* Images & Files */}
+                <div>
+                  <h4 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-4">
+                    <PhotoIcon className="h-5 w-5" />
+                    Images & Files
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    {(() => {
+                      const previewFile = getPreviewFile(viewingTicket);
+                      return previewFile ? (
+                        <button
+                          type="button"
+                          onClick={() => openFile(previewFile)}
+                          className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 hover:border-primary"
+                        >
+                          <img
+                            src={getFileUrl(previewFile.url)}
+                            alt={previewFile.originalName || "Ticket preview"}
+                            className="h-32 w-full object-cover transition group-hover:opacity-75"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/0 transition group-hover:bg-slate-900/50 group-hover:opacity-100">
+                            <span className="text-white text-xs font-semibold opacity-0 group-hover:opacity-100">View</span>
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="flex h-32 items-center justify-center rounded-xl border border-slate-200 border-dashed bg-slate-50 text-slate-400">
+                          <PhotoIcon className="h-6 w-6" />
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Court Details */}
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 mb-4">Court Details</h4>
+                  <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Court Date</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{formatDate(viewingTicket.courtDate)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Court Name</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{viewingTicket.courtName || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assigned Lawyer</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{getLawyerName(viewingTicket)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                      <div className="mt-1">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                            viewingTicket.status === "Closed"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : viewingTicket.status === "Cancelled"
+                                ? "bg-rose-100 text-rose-700"
+                                : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {viewingTicket.status || "PENDING"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Second Row: Notes & Documents */}
+              <div>
+                <h4 className="text-base font-bold text-slate-900 mb-4">Notes & Documents</h4>
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-slate-200 bg-blue-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Customer Notes</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-blue-800">{getCustomerTicketNotes(viewingTicket)}</p>
+                  </div>
+                  {!isMemberSelfView && (
+                    <div className="rounded-xl border border-slate-200 bg-amber-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Team Notes</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-amber-800">{viewingTicket.teamNotes || "No notes available"}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Third Row: Case Documents */}
+              <div>
+                <h4 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-4">
+                  <DocumentTextIcon className="h-5 w-5" />
+                  Case Documents
+                </h4>
+                <div className="space-y-2">
+                  {(() => {
+                    const caseResultFile = viewingTicket?.caseResultFile?.url ? viewingTicket.caseResultFile : null;
+                    const documents = Array.isArray(viewingTicket?.ticketDocuments) ? viewingTicket.ticketDocuments : [];
+                    
+                    if (!caseResultFile && documents.length === 0) {
+                      return (
+                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                          <p className="text-sm text-slate-500">No documents uploaded</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <>
+                        {caseResultFile && (
+                          <button
+                            type="button"
+                            onClick={() => openFile(caseResultFile)}
+                            className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-primary hover:bg-slate-50"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <DocumentTextIcon className="h-5 w-5 text-slate-400" />
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-700">{caseResultFile.originalName || "Case Result"}</p>
+                                  <p className="text-xs text-slate-500">PDF Document</p>
+                                </div>
+                              </div>
+                              <span className="text-xs font-semibold text-primary">View</span>
+                            </div>
+                          </button>
+                        )}
+                        {documents.map((doc, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => openFile(doc)}
+                            className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-primary hover:bg-slate-50"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <DocumentTextIcon className="h-5 w-5 text-slate-400" />
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-700">{doc.originalName || `Document ${idx + 1}`}</p>
+                                  <p className="text-xs text-slate-500">{doc.mimeType || "Document"}</p>
+                                </div>
+                              </div>
+                              <span className="text-xs font-semibold text-primary">View</span>
+                            </div>
+                          </button>
+                        ))}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
           </div>
         </div>
