@@ -661,28 +661,6 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
     }
   };
 
-  const toggleMemberBlockStatus = async (record) => {
-    try {
-      const data = await apiRequest(`/api/users/${record._id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ isActive: !record.isActive }),
-      });
-
-      if (data.user) {
-        setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
-      }
-
-      setNotification({
-        text: data.user?.isActive ? "Member activated successfully" : "Member blocked and subscription terminated",
-        type: "success",
-      });
-    } catch (error) {
-      setNotification({ text: error.message || "Unable to update member status", type: "error" });
-    } finally {
-      setMoreActionsMemberId("");
-    }
-  };
-
   const cancelMemberSubscription = async (record) => {
     try {
       const data = await apiRequest(`/api/users/${record._id}/cancel-subscription`, {

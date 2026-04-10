@@ -143,19 +143,6 @@ export default function MemberProfilePage() {
         ? "BANK"
         : null;
 
-  const ticketColumns = [
-    "T.ID",
-    "Image",
-    "Created By",
-    "Court Date",
-    "Court Name",
-    "Lawyer",
-    "Notes",
-    "Case Result",
-    "Status",
-    "Actions",
-  ];
-
   const formatDate = (value) => {
     if (!value) {
       return "-";

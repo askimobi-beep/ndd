@@ -1,12 +1,10 @@
 import { useState } from "react";
 import {
   CheckCircleIcon,
-  EllipsisVerticalIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
   EyeIcon,
   PencilIcon,
-  ArrowLeftIcon,
   PhotoIcon,
   DocumentTextIcon,
 } from "@heroicons/react/24/outline";
@@ -78,7 +76,6 @@ export default function MemberTicketsModal({
   onNavigateToEditTicket,
   userRole,
 }) {
-  const [activeActionTicketId, setActiveActionTicketId] = useState("");
   const [selectedTeamNoteTicket, setSelectedTeamNoteTicket] = useState(null);
   const [selectedNoteType, setSelectedNoteType] = useState("team");
   const [viewingTicket, setViewingTicket] = useState(null);
