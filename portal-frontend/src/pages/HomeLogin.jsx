@@ -5,6 +5,8 @@ import {
   EnvelopeIcon,
   LockClosedIcon,
   ShieldCheckIcon,
+  EyeIcon,
+  EyeSlashIcon,
 } from "@heroicons/react/24/outline";
 import { apiRequest } from "../utils/api";
 import {
@@ -21,12 +23,19 @@ export default function HomeLogin() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (isAuthenticated()) {
       const sessionUser = getAuthUser();
       navigate(getDefaultRouteForRole(sessionUser?.role), { replace: true });
+    }
+    const savedEmail = localStorage.getItem("ndd_remember_email");
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
     }
   }, [navigate]);
 
@@ -41,6 +50,11 @@ export default function HomeLogin() {
         body: JSON.stringify({ email, password }),
       });
 
+      if (rememberMe) {
+        localStorage.setItem("ndd_remember_email", email);
+      } else {
+        localStorage.removeItem("ndd_remember_email");
+      }
       saveAuthSession(data.token, data.user);
       const defaultPath = getDefaultRouteForRole(data.user?.role);
       navigate(defaultPath, { replace: true });
@@ -131,17 +145,38 @@ export default function HomeLogin() {
                   <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 transition-all duration-300 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10">
                     <LockClosedIcon className="h-5 w-5 text-slate-400" />
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
                       className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="flex-shrink-0 text-slate-400 transition hover:text-primary"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? (
+                        <EyeSlashIcon className="h-5 w-5" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5" />
+                      )}
+                    </button>
                   </div>
                 </label>
 
-                <div className="flex justify-end text-sm">
+                <div className="flex items-center justify-between text-sm">
+                  <label className="flex cursor-pointer items-center gap-2 select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 accent-primary cursor-pointer"
+                    />
+                    <span className="text-slate-600">Remember me</span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => navigate("/forgot-password")}
@@ -158,17 +193,6 @@ export default function HomeLogin() {
                   {isSubmitting ? "Signing in..." : "Log In"}
                   <ArrowRightIcon className="h-5 w-5" />
                 </button>
-
-                <p className="text-center text-sm text-slate-500">
-                  Don&apos;t have an account?{" "}
-                  <button
-                    type="button"
-                    onClick={() => navigate("/signup")}
-                    className="font-semibold text-primary transition hover:text-secondary"
-                  >
-                    Create one
-                  </button>
-                </p>
 
                 {errorMessage && (
                   <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600">

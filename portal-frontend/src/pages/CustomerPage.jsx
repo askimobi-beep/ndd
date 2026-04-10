@@ -11,6 +11,10 @@ import {
   DocumentIcon,
   EllipsisHorizontalIcon,
   UserPlusIcon,
+  CreditCardIcon,
+  ArrowPathIcon,
+  ReceiptPercentIcon,
+  TicketIcon,
 } from "@heroicons/react/24/outline";
 import MemberTicketsModal from "../components/MemberTicketsModal";
 import TopNavbar from "../components/TopNavbar";
@@ -33,6 +37,7 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
   const canUsePaymentMethodButton = canViewAllActionButtons;
   const canUseTicketsButton = canViewBillingDetails;
   const canUseMoreActionsMenu = hasAnyRole(user?.role, ["ADMIN", "SUPERVISOR", "AGENT"]);
+  const canEditMemberDetails = hasAnyRole(user?.role, ["ADMIN", "AGENT"]);
   const canUseAdminSubscriptionActions = isAdmin;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notification, setNotification] = useState({ text: "", type: "success" });
@@ -245,9 +250,29 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
     setFormData((prev) => ({ ...prev, password: generated }));
   };
 
+  const normalizeUsPhoneDigits = (value) => {
+    const digitsOnly = String(value || "").replace(/\D/g, "");
+
+    if (digitsOnly.length === 11 && digitsOnly.startsWith("1")) {
+      return digitsOnly.slice(1, 11);
+    }
+
+    return digitsOnly.slice(0, 10);
+  };
+
+  const isValidUsPhoneDigits = (value) => normalizeUsPhoneDigits(value).length === 10;
+
+  const toUsE164Phone = (digits) => {
+    const normalizedDigits = normalizeUsPhoneDigits(digits);
+    return normalizedDigits ? `+1${normalizedDigits}` : "";
+  };
+
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === "phone" ? normalizeUsPhoneDigits(value) : value,
+    }));
   };
 
   const getFileUrl = (filePath) => {
@@ -296,7 +321,11 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
       String(formData.firstName || "").trim() &&
         String(formData.lastName || "").trim() &&
         String(formData.email || "").trim() &&
-        String(formData.password || "").trim()
+        String(formData.licenseNo || "").trim() &&
+        String(formData.dot || "").trim() &&
+        String(formData.state || "").trim() &&
+        String(formData.password || "").trim() &&
+        isValidUsPhoneDigits(formData.phone)
     );
   }, [formData]);
 
@@ -476,7 +505,7 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
   const addFleetCustomer = () => {
     if (!canSaveCurrentCustomer) {
       setNotification({
-        text: "First name, last name, email, and password are required before saving next member.",
+        text: "First name, last name, email, password, and a valid 10-digit US phone number are required before saving next member.",
         type: "error",
       });
       return;
@@ -516,12 +545,32 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
       let data;
 
       if (customerPlan === "INDIVIDUAL") {
+        const hasMissingRequiredFields = !String(formData.firstName || "").trim()
+          || !String(formData.lastName || "").trim()
+          || !String(formData.email || "").trim()
+          || !String(formData.password || "").trim()
+          || !String(formData.licenseNo || "").trim()
+          || !String(formData.dot || "").trim()
+          || !String(formData.state || "").trim();
+
+        if (hasMissingRequiredFields) {
+          setNotification({ text: "Please fill all required fields (Address is optional).", type: "error" });
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (!isValidUsPhoneDigits(formData.phone)) {
+          setNotification({ text: "Please enter a valid 10-digit US phone number.", type: "error" });
+          setIsSubmitting(false);
+          return;
+        }
+
         const submitData = new FormData();
         submitData.append("firstName", formData.firstName);
         submitData.append("lastName", formData.lastName);
         submitData.append("email", formData.email);
         submitData.append("password", formData.password);
-        submitData.append("phone", formData.phone);
+        submitData.append("phone", toUsE164Phone(formData.phone));
         submitData.append("office", formData.office);
         submitData.append("licenseNo", formData.licenseNo);
         submitData.append("dot", formData.dot);
@@ -556,6 +605,23 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
           });
         }
 
+        const hasInvalidFleetEntry = customersForSubmit.some((entry) => {
+          return !String(entry.firstName || "").trim()
+            || !String(entry.lastName || "").trim()
+            || !String(entry.email || "").trim()
+            || !String(entry.password || "").trim()
+            || !String(entry.licenseNo || "").trim()
+            || !String(entry.dot || "").trim()
+            || !String(entry.state || "").trim()
+            || !isValidUsPhoneDigits(entry.phone);
+        });
+
+        if (hasInvalidFleetEntry) {
+          setNotification({ text: "Each fleet member must fill all required fields (Address optional) and have a valid 10-digit US phone.", type: "error" });
+          setIsSubmitting(false);
+          return;
+        }
+
         if (customersForSubmit.length < fleetTargetCount) {
           setNotification({ text: `Please add at least ${fleetTargetCount} members for fleet plan.`, type: "error" });
           setIsSubmitting(false);
@@ -567,6 +633,7 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
           body: JSON.stringify({
             customers: customersForSubmit.map((entry) => ({
               ...entry,
+              phone: toUsE164Phone(entry.phone),
               customerPlan: "FLEET",
             })),
           }),
@@ -586,6 +653,10 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
   };
 
   const openEditModal = (record) => {
+    if (!canEditMemberDetails) {
+      return;
+    }
+
     setEditingUserId(record._id);
     setEditFormData({
       firstName: record.firstName || "",
@@ -1226,23 +1297,26 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                                 <button
                                   type="button"
                                   onClick={() => openPaymentMethodModal(record)}
-                                  className="rounded-lg bg-purple-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-purple-600"
+                                  className="inline-flex items-center justify-center gap-1 rounded-lg bg-purple-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-purple-600"
                                 >
+                                  <CreditCardIcon className="h-3.5 w-3.5" />
                                   Payment Method
                                 </button>
                               )}
                               <button
                                 type="button"
                                 onClick={() => openSubscriptionModal(record)}
-                                className="rounded-lg bg-blue-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-blue-600"
+                                className="inline-flex items-center justify-center gap-1 rounded-lg bg-blue-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-blue-600"
                               >
+                                <ArrowPathIcon className="h-3.5 w-3.5" />
                                 Subscription
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openInvoiceModal(record)}
-                                className="rounded-lg bg-orange-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-orange-600"
+                                className="inline-flex items-center justify-center gap-1 rounded-lg bg-orange-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-orange-600"
                               >
+                                <ReceiptPercentIcon className="h-3.5 w-3.5" />
                                 Invoices
                               </button>
                             </>
@@ -1251,8 +1325,9 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                             <button
                               type="button"
                               onClick={() => openMemberTicketsModal(record)}
-                              className="rounded-lg bg-green-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-green-600"
+                              className="inline-flex items-center justify-center gap-1 rounded-lg bg-green-500 text-white px-2.5 py-1.5 text-xs font-semibold transition hover:bg-green-600"
                             >
+                              <TicketIcon className="h-3.5 w-3.5" />
                               Tickets
                             </button>
                           )}
@@ -1300,16 +1375,18 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                                       View License Pic
                                     </button>
                                   )}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      openEditModal(record);
-                                      setMoreActionsMemberId("");
-                                    }}
-                                    className="mt-1 w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                                  >
-                                    Edit Member
-                                  </button>
+                                  {canEditMemberDetails && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        openEditModal(record);
+                                        setMoreActionsMemberId("");
+                                      }}
+                                      className="mt-1 w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                                    >
+                                      Edit Member
+                                    </button>
+                                  )}
                                   {canUseAdminSubscriptionActions && (
                                     <>
                                       <button
@@ -1994,48 +2071,62 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                   </div>
 
                   <div>
-                    <label className="text-sm font-semibold text-slate-700">Phone Number</label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      placeholder="Enter phone number"
-                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
-                    />
+                    <label className="text-sm font-semibold text-slate-700">Phone Number *</label>
+                    <div className="mt-2 flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10">
+                      <span className="mr-3 inline-flex items-center gap-1 border-r border-slate-200 pr-3 text-sm font-semibold text-slate-700">
+                        <span aria-hidden="true">🇺🇸</span>
+                        <span>+1</span>
+                      </span>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        required
+                        inputMode="numeric"
+                        pattern="[0-9]{10}"
+                        maxLength={10}
+                        placeholder="5551234567"
+                        className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Enter exactly 10 digits (US number).</p>
                   </div>
 
                   <div>
-                    <label className="text-sm font-semibold text-slate-700">License No</label>
+                    <label className="text-sm font-semibold text-slate-700">License No *</label>
                     <input
                       type="text"
                       name="licenseNo"
                       value={formData.licenseNo}
                       onChange={handleChange}
+                      required={customerPlan === "INDIVIDUAL"}
                       placeholder="Enter license number"
                       className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                     />
                   </div>
 
                   <div>
-                    <label className="text-sm font-semibold text-slate-700">DOT</label>
+                    <label className="text-sm font-semibold text-slate-700">DOT *</label>
                     <input
                       type="text"
                       name="dot"
                       value={formData.dot}
                       onChange={handleChange}
+                      required={customerPlan === "INDIVIDUAL"}
                       placeholder="Enter DOT"
                       className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                     />
                   </div>
 
                   <div>
-                    <label className="text-sm font-semibold text-slate-700">State</label>
+                    <label className="text-sm font-semibold text-slate-700">State *</label>
                     <input
                       type="text"
                       name="state"
                       value={formData.state}
                       onChange={handleChange}
+                      required={customerPlan === "INDIVIDUAL"}
                       placeholder="Enter state"
                       className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                     />
