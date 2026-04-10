@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   MagnifyingGlassIcon,
   PlusIcon,
@@ -17,9 +17,11 @@ import TopNavbar from "../components/TopNavbar";
 import { API_BASE_URL, apiRequest } from "../utils/api";
 import { getAuthUser, hasAnyRole } from "../utils/auth";
 
-export default function MemberPage() {
+export default function MemberPage({ initialQuickFilter = "ALL" }) {
   const user = getAuthUser();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isCancelledRoute = location.pathname === "/members/cancelled";
   const isAdmin = hasAnyRole(user?.role, ["ADMIN"]);
   const isSupervisor = hasAnyRole(user?.role, ["SUPERVISOR"]);
   const isTicketChecker = hasAnyRole(user?.role, ["TICKET CHECKER"]);
@@ -79,7 +81,7 @@ export default function MemberPage() {
   const [isAssignAgentsLoading, setIsAssignAgentsLoading] = useState(false);
   const [isAssigningAgent, setIsAssigningAgent] = useState(false);
   const [search, setSearch] = useState("");
-  const [quickFilter, setQuickFilter] = useState("ALL");
+  const [quickFilter, setQuickFilter] = useState(initialQuickFilter === "CANCELLED" ? "CANCELLED" : "ALL");
   const [dateFilter, setDateFilter] = useState("ALL");
   const [planFilter, setPlanFilter] = useState("ALL");
   const [cancelledPlanFilter, setCancelledPlanFilter] = useState("ALL");
@@ -356,6 +358,10 @@ export default function MemberPage() {
     loadMembers();
   }, [loadMembers]);
 
+  useEffect(() => {
+    setQuickFilter(initialQuickFilter === "CANCELLED" ? "CANCELLED" : "ALL");
+  }, [initialQuickFilter]);
+
   const filteredRecords = useMemo(() => {
     const query = search.trim().toLowerCase();
     const now = Date.now();
@@ -377,6 +383,10 @@ export default function MemberPage() {
         if (cancelledPlanFilter === "FLEET" && normalizedPlan !== "FLEET") return false;
         if (cancelledPlanFilter === "INDIVIDUAL" && normalizedPlan !== "INDIVIDUAL") return false;
       } else {
+        if (hasCancelledSubscription) {
+          return false;
+        }
+
         if (quickFilter === "PENDING" && (record.isApprovedByAdmin || !record.requiresAdminApproval)) {
           return false;
         }
@@ -701,7 +711,7 @@ export default function MemberPage() {
         setRecords((prev) => prev.map((item) => (item._id === data.user._id ? data.user : item)));
       }
 
-      setNotification({ text: data.message || "Subscription reactivated successfully", type: "success" });
+      setNotification({ text: data.message || "Subscription renewed successfully. New invoice created.", type: "success" });
     } catch (error) {
       setNotification({ text: error.message || "Unable to reactivate subscription", type: "error" });
     } finally {
@@ -898,7 +908,7 @@ export default function MemberPage() {
                         Pending Approvals ({pendingCount})
                       </button>
                       <button
-                        onClick={() => setQuickFilter((prev) => (prev === "CANCELLED" ? "ALL" : "CANCELLED"))}
+                        onClick={() => navigate(isCancelledRoute ? "/members" : "/members/cancelled")}
                         className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
                           quickFilter === "CANCELLED"
                             ? "border-rose-500 bg-rose-50 text-rose-700"
@@ -1035,7 +1045,10 @@ export default function MemberPage() {
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
-                        onClick={() => { setQuickFilter("ALL"); setCancelledPlanFilter("ALL"); }}
+                        onClick={() => {
+                          setCancelledPlanFilter("ALL");
+                          navigate("/members");
+                        }}
                         className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary hover:text-primary"
                       >
                         ← Back
@@ -1326,7 +1339,7 @@ export default function MemberPage() {
                                         onClick={() => (isSubscriptionCancelled(record) ? unCancelMemberSubscription(record) : cancelMemberSubscription(record))}
                                         className={`mt-1 w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-white transition ${isSubscriptionCancelled(record) ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-500 hover:bg-amber-600"}`}
                                       >
-                                        {isSubscriptionCancelled(record) ? "Reactivate Subscription" : "Cancel Subscription"}
+                                        {isSubscriptionCancelled(record) ? "Renew Subscription" : "Cancel Subscription"}
                                       </button>
                                       {record?.subscriptionCancellationCount > 0 && (
                                         <div className="mt-1 flex items-center justify-center rounded-lg bg-slate-100 px-2 py-1.5">

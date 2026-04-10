@@ -47,7 +47,8 @@ function App() {
         <Route path="/lawyers" element={<ProtectedRoute allowedRoles={["ADMIN", "TICKET CHECKER"]}><AppLayout><LawyerPage /></AppLayout></ProtectedRoute>} />
         <Route path="/supervisor" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AppLayout><SupervisorPage /></AppLayout></ProtectedRoute>} />
         <Route path="/agents" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR"]}><AppLayout><AgentPage /></AppLayout></ProtectedRoute>} />
-        <Route path="/members" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"]}><AppLayout><MemberPage /></AppLayout></ProtectedRoute>} />
+        <Route path="/members" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"]}><AppLayout><MemberPage initialQuickFilter="ALL" /></AppLayout></ProtectedRoute>} />
+        <Route path="/members/cancelled" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"]}><AppLayout><MemberPage initialQuickFilter="CANCELLED" /></AppLayout></ProtectedRoute>} />
         <Route path="/member-dashboard" element={<ProtectedRoute allowedRoles={["CUSTOMER"]}><AppLayout><MemberProfilePage /></AppLayout></ProtectedRoute>} />
         <Route path="/member-profile/:id" element={<ProtectedRoute allowedRoles={["ADMIN", "SUPERVISOR", "AGENT", "TICKET CHECKER"]}><AppLayout><MemberProfilePage /></AppLayout></ProtectedRoute>} />
         <Route path="/customers" element={<Navigate to="/members" replace />} />

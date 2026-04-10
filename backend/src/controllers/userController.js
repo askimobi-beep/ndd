@@ -1316,6 +1316,11 @@ export async function cancelCustomerSubscription(req, res, next) {
       throw new Error("Customer not found");
     }
 
+    if (customer.subscriptionCancelledAt) {
+      res.status(400);
+      throw new Error("Subscription is already cancelled");
+    }
+
     const now = new Date();
     customer.subscriptionEndAt = now;
     customer.subscriptionCancelledAt = now;
@@ -1346,12 +1351,21 @@ export async function unCancelCustomerSubscription(req, res, next) {
       throw new Error("Customer not found");
     }
 
+    if (!customer.subscriptionCancelledAt) {
+      res.status(400);
+      throw new Error("Subscription is already active");
+    }
+
     const now = new Date();
+    customer.subscriptionStartAt = now;
     customer.subscriptionCancelledAt = null;
     customer.subscriptionEndAt = new Date(now.getTime() + BILLING_CYCLE_MS);
 
     // Create a new invoice for the re-activated subscription
     const planSummary = getPlanAmountSummary(customer?.customerPlan);
+    if (!Array.isArray(customer.invoices)) {
+      customer.invoices = [];
+    }
     customer.invoices.push({
       invoiceNumber: createInvoiceNumber(customer._id),
       amount: planSummary.totalAmount,
@@ -1367,7 +1381,7 @@ export async function unCancelCustomerSubscription(req, res, next) {
     await customer.populate("supervisorId", "firstName lastName email role");
 
     return res.json({
-      message: "Subscription reactivated successfully. New invoice created.",
+      message: "Subscription renewed successfully. New invoice created.",
       user: customer,
     });
   } catch (error) {
