@@ -325,7 +325,7 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
         String(formData.dot || "").trim() &&
         String(formData.state || "").trim() &&
         String(formData.password || "").trim() &&
-        isValidUsPhoneDigits(formData.phone)
+        normalizeUsPhoneDigits(formData.phone).length === 10
     );
   }, [formData]);
 

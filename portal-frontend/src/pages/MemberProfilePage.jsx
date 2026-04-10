@@ -15,7 +15,6 @@ import {
   PencilIcon,
   TicketIcon,
   CheckBadgeIcon,
-  ReceiptPercentIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import TopNavbar from "../components/TopNavbar";
