@@ -74,6 +74,7 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("ALL");
   const [invoiceSort, setInvoiceSort] = useState("NEWEST");
   const [showMemberTicketsModal, setShowMemberTicketsModal] = useState(false);
+  const [showOverdueModal, setShowOverdueModal] = useState(false);
   const [isMemberTicketsLoading, setIsMemberTicketsLoading] = useState(false);
   const [memberTicketsRows, setMemberTicketsRows] = useState([]);
   const [memberTicketsCustomer, setMemberTicketsCustomer] = useState(null);
@@ -396,11 +397,11 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
     const now = Date.now();
 
     return records.filter((record) => {
-      const isPaymentApproved = String(record.paymentStatus || "").trim().toUpperCase() === "PAID_APPROVED";
+      const paymentStatus = String(record.paymentStatus || "").trim().toUpperCase();
       const isAdminApproved = Boolean(record.isApprovedByAdmin);
 
-      // Only list members after payment confirmation and admin approval.
-      if (!isPaymentApproved || !isAdminApproved) {
+      // Show members who are either paid/approved or under review (but admin approved)
+      if (!(isAdminApproved && (paymentStatus === "PAID_APPROVED" || paymentStatus === "UNDER_REVIEW"))) {
         return false;
       }
 
@@ -501,6 +502,34 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
     () => records.filter((record) => isSubscriptionCancelled(record) && String(record.customerPlan || "INDIVIDUAL").trim().toUpperCase() === "INDIVIDUAL").length,
     [records]
   );
+
+  const overdueCustomers = useMemo(
+    () =>
+      records.filter(
+        (record) =>
+          Array.isArray(record.invoices) &&
+          record.invoices.some((invoice) => getInvoiceStatusCategory(invoice.status) === "OVERDUE")
+      ),
+    [records]
+  );
+
+  const overdueInvoices = useMemo(
+    () =>
+      overdueCustomers.flatMap((record) =>
+        (Array.isArray(record.invoices) ? record.invoices : []).filter(
+          (invoice) => getInvoiceStatusCategory(invoice.status) === "OVERDUE"
+        )
+      ),
+    [overdueCustomers]
+  );
+
+  const overdueAmount = overdueInvoices.reduce((sum, invoice) => sum + (Number(invoice.amountDue) || 0), 0);
+
+  const totalCustomers = records.length;
+  const reservedCount = useMemo(() => records.filter((record) => record.status === "RESERVED").length, [records]);
+  const paidCount = useMemo(() => records.filter((record) => record.paymentStatus === "PAID_APPROVED").length, [records]);
+  const unpaidCount = useMemo(() => records.filter((record) => record.paymentStatus !== "PAID_APPROVED").length, [records]);
+  const canceledCount = cancelledCount;
 
   const addFleetCustomer = () => {
     if (!canSaveCurrentCustomer) {
@@ -914,26 +943,133 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
 
       <div className="flex-1 px-6 py-8 lg:px-8">
         <div className="w-full space-y-8">
-          <div className="rounded-[28px] bg-gradient-to-r from-primary via-secondary to-[#1f3c97] p-5 text-white shadow-[0_16px_40px_rgba(0,87,231,0.20)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+
+          {/* Member Management Header */}
+          <div className="rounded-[24px] border border-white/20 bg-gradient-to-r from-[#0b3f93] via-primary to-[#1e4ea8] p-6 text-white shadow-[0_14px_36px_rgba(15,23,42,0.24)]">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="text-2xl font-semibold lg:text-3xl">Member Management</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">Operations Dashboard</p>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight lg:text-3xl">Member Management</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100/95">
                   Manage member records and account access.
                 </p>
               </div>
-
               {canManageMembers && (
                 <button
                   onClick={() => setIsModalOpen(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-base font-semibold text-primary transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-xl"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-primary transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-xl"
                 >
-                  <PlusIcon className="h-5 w-5" />
+                  <PlusIcon className="h-4 w-4" />
                   Add Member
                 </button>
               )}
             </div>
           </div>
+
+          {/* Summary Stats & Overdue Alerts (Agent only) */}
+          {canManageMembers && (
+            <div className="w-full mt-4 flex flex-col gap-3">
+              <div className="flex flex-wrap gap-3">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700 min-w-[140px] min-h-[68px]">
+                  <span className="text-base font-bold">{totalCustomers}</span>
+                  <span className="mt-1 text-xs font-semibold uppercase tracking-wide">Total Customers</span>
+                </div>
+                <div className="flex flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-700 min-w-[140px] min-h-[68px]">
+                  <span className="text-base font-bold">{reservedCount}</span>
+                  <span className="mt-1 text-xs font-semibold uppercase tracking-wide">Reserved</span>
+                </div>
+                <div className="flex flex-col items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700 min-w-[140px] min-h-[68px]">
+                  <span className="text-base font-bold">{paidCount}</span>
+                  <span className="mt-1 text-xs font-semibold uppercase tracking-wide">Paid</span>
+                </div>
+                <div className="flex flex-col items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700 min-w-[140px] min-h-[68px]">
+                  <span className="text-base font-bold">{unpaidCount}</span>
+                  <span className="mt-1 text-xs font-semibold uppercase tracking-wide">Unpaid</span>
+                </div>
+                <div className="flex flex-col items-center justify-center rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-slate-700 min-w-[140px] min-h-[68px]">
+                  <span className="text-base font-bold">{canceledCount}</span>
+                  <span className="mt-1 text-xs font-semibold uppercase tracking-wide">Canceled</span>
+                </div>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <span className="text-red-600 text-xl font-bold">&#9888;</span>
+                <span className="text-sm font-semibold text-red-700">Overdue Customer Alerts</span>
+                <span className="inline-flex items-center rounded-lg bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">{overdueCustomers.length} Customers</span>
+                <span className="inline-flex items-center rounded-lg bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700">{overdueInvoices.length} Invoices</span>
+                <span className="inline-flex items-center rounded-lg bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">${overdueAmount.toFixed(2)} Due</span>
+                <button
+                  type="button"
+                  onClick={() => setShowOverdueModal(true)}
+                  className="ml-auto inline-flex items-center rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700"
+                >
+                  View Details
+                </button>
+              </div>
+            </div>
+          )}
+      {/* Overdue Details Modal */}
+      {showOverdueModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/30" onClick={() => setShowOverdueModal(false)} />
+          <div className="relative flex min-h-screen items-center justify-center px-4">
+            <div role="dialog" aria-modal="true" className="relative w-full max-w-4xl mx-auto rounded-2xl bg-white p-7 shadow-xl">
+            <h3 className="mb-1 flex items-center gap-2 text-2xl font-bold text-orange-600">
+              <span className="text-3xl">&#9888;</span> Customer Payment Alerts & Overdue Notifications
+            </h3>
+            <p className="text-slate-600 mb-5 text-sm">Review and manage customers with outstanding invoices</p>
+            <div className="mb-7 flex flex-wrap gap-3">
+              <div className="flex min-w-[170px] flex-1 flex-col items-center rounded-xl border border-orange-200 bg-orange-50 p-4">
+                <span className="text-2xl font-bold text-orange-600">{overdueCustomers.length}</span>
+                <span className="mt-1 text-sm font-semibold text-orange-700">Total Overdue Customers</span>
+              </div>
+              <div className="flex min-w-[170px] flex-1 flex-col items-center rounded-xl border border-orange-200 bg-orange-50 p-4">
+                <span className="text-2xl font-bold text-orange-600">{overdueInvoices.length}</span>
+                <span className="mt-1 text-sm font-semibold text-orange-700">Overdue Invoices</span>
+              </div>
+              <div className="flex min-w-[170px] flex-1 flex-col items-center rounded-xl border border-red-200 bg-red-50 p-4">
+                <span className="text-2xl font-bold text-red-600">${overdueAmount.toFixed(2)}</span>
+                <span className="mt-1 text-sm font-semibold text-red-700">Total Amount Overdue</span>
+              </div>
+            </div>
+            <div className="space-y-4">
+              {overdueCustomers.map((customer) => {
+                const customerOverdueInvoices = customer.invoices.filter(inv => getInvoiceStatusCategory(inv.status) === "OVERDUE");
+                const maxDaysPastDue = Math.max(...customerOverdueInvoices.map(inv => inv.daysPastDue || 0));
+                const totalDue = customerOverdueInvoices.reduce((sum, inv) => sum + (Number(inv.amountDue) || 0), 0);
+                return (
+                  <div key={customer._id} className="flex flex-col md:flex-row items-center justify-between bg-slate-50 rounded-xl p-4">
+                    <div className="flex items-center gap-4 flex-1">
+                      <img src={customer.avatarUrl || '/default-avatar.png'} alt={customer.firstName} className="w-12 h-12 rounded-full object-cover border" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900">{customer.firstName} {customer.lastName}</span>
+                          <span className="bg-orange-100 text-orange-700 rounded px-2 py-0.5 text-xs font-semibold">{memberIdByUserId[customer._id]}</span>
+                          {!customer.isActive && <span className="bg-red-100 text-red-600 rounded px-2 py-0.5 text-xs font-semibold">Inactive</span>}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-blue-600 text-xs"><EnvelopeIcon className="inline w-4 h-4" /> {customer.email}</span>
+                          <span className="text-green-700 text-xs ml-2"><PhoneIcon className="inline w-4 h-4" /> {customer.phone}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end mt-4 md:mt-0">
+                      <span className="text-purple-700 text-xs font-semibold mb-1">{customer.customerPlan || 'individual'}</span>
+                      <span className="bg-red-100 text-red-600 rounded px-2 py-0.5 text-xs font-semibold mb-1">{customerOverdueInvoices.length} Overdue</span>
+                      <span className="text-xs text-slate-500 mb-1">Max: {maxDaysPastDue} days past due</span>
+                      <span className="text-xl font-bold text-red-600">${totalDue.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {overdueCustomers.length === 0 && <div className="text-center text-slate-500">No overdue customers.</div>}
+            </div>
+            <div className="flex justify-end mt-8">
+              <button onClick={() => setShowOverdueModal(false)} className="rounded-lg bg-slate-200 px-6 py-2 text-base font-semibold text-slate-700 hover:bg-slate-300">Close</button>
+            </div>
+            </div>
+          </div>
+        </div>
+      )}
 
           {/* Quick Actions & Filters Section */}
           <div className="rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:p-8">
@@ -1156,18 +1292,18 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
             {canViewMembers && filteredRecords.length > 0 && (
               <div className="mt-6 space-y-4">
                 {filteredRecords.map((record) => (
-                  <div key={record._id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-slate-300 hover:shadow-md">
+                  <div key={record._id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md">
                     {(() => {
                       const memberId = memberIdByUserId[record._id] || formatMemberId(1);
 
                       return (
-                    <div className="grid gap-6 lg:grid-cols-5">
+                    <div className="grid gap-4 lg:grid-cols-5">
                       {/* User Information */}
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 mb-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+                        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
                           Member Information
                         </p>
-                        <div className="space-y-2">
+                        <div className="space-y-2.5">
                           <div>
                             <p className="text-sm font-semibold text-slate-900">{`${record.firstName || ""} ${record.lastName || ""}`.trim()}</p>
                             <span className="mt-1 inline-flex rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{memberId}</span>
@@ -1196,8 +1332,8 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                       </div>
 
                       {/* Contact Details */}
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 mb-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+                        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
                           Contact Details
                         </p>
                         <div className="space-y-2">
@@ -1223,8 +1359,8 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                       </div>
 
                       {/* Documents */}
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 mb-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+                        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
                           Documents
                         </p>
                         <div className="space-y-2">
@@ -1253,8 +1389,8 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                       </div>
 
                       {/* Status */}
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 mb-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+                        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
                           Status
                         </p>
                         <div className="flex flex-col gap-2">
@@ -1286,8 +1422,8 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                       </div>
 
                       {/* Actions */}
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 mb-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+                        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
                           Actions
                         </p>
                         <div className="relative flex flex-col gap-1">
@@ -1331,14 +1467,16 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                               Tickets
                             </button>
                           )}
-                          {isAdmin && !record.createdBy && (
+                          {isAdmin && (
                             <button
                               type="button"
                               onClick={() => openAssignAgentModal(record)}
                               className="inline-flex items-center justify-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700"
                             >
                               <UserPlusIcon className="h-3.5 w-3.5" />
-                              Assign Agent
+                              {record.agentId && record.agentId !== "" && record.agentId !== null
+                                ? "Replace Agent"
+                                : "Assign Agent"}
                             </button>
                           )}
                           {canConfirmPayment && record.paymentStatus === "UNDER_REVIEW" && (

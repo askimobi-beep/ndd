@@ -119,12 +119,14 @@ export default function ReservationManagementPage() {
   const reservedMembers = useMemo(() => {
     return records.filter((record) => {
       const paymentStatus = String(record?.paymentStatus || record?.paymentStage || "").trim().toUpperCase();
+      // Only show reserved if payment is not yet confirmed and not under review
       return (
         Boolean(record.isActive) &&
         !record.isApprovedByAdmin &&
-        paymentStatus !== "UNDER_REVIEW" &&
-        paymentStatus !== "PAID_APPROVED" &&
-        paymentStatus !== "PAID_PENDING_APPROVAL"
+        (
+          paymentStatus === "RESERVED" ||
+          paymentStatus === "UNPAID"
+        )
       );
     });
   }, [records]);
@@ -403,6 +405,8 @@ export default function ReservationManagementPage() {
                     <div className="border-t border-slate-200 px-3 py-2 flex flex-wrap gap-2">
                       {activeTab === "RESERVED" && (
                         <>
+                          {/* DEBUG: Show paymentStatus */}
+                          {/* Only show Confirm Payment for UNPAID customers and remove status display */}
                           <button
                             onClick={() => handleGetPaymentLink(record)}
                             disabled={actionUserId === record._id}
@@ -419,6 +423,16 @@ export default function ReservationManagementPage() {
                             <PaperAirplaneIcon className="h-3.5 w-3.5" />
                             Send Link by Email
                           </button>
+                          {/* Show Confirm Payment button only if not already confirmed and user is admin */}
+                          {canConfirmPayment && String(record.paymentStatus || "").trim().toUpperCase() === "UNPAID" && (
+                            <button
+                              onClick={() => handleConfirmPayment(record)}
+                              disabled={actionUserId === record._id}
+                              className="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white inline-flex items-center gap-1.5 transition hover:bg-blue-700 disabled:opacity-60"
+                            >
+                              {actionUserId === record._id ? "Confirming..." : "Confirm Payment"}
+                            </button>
+                          )}
                         </>
                       )}
 

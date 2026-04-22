@@ -1275,9 +1275,10 @@ export async function confirmCustomerPayment(req, res, next) {
       throw new Error("Customer not found");
     }
 
-    if (customer.paymentStatus !== "UNDER_REVIEW") {
+    // Allow admin to confirm payment for RESERVED/UNPAID or UNDER_REVIEW
+    if (!["UNDER_REVIEW", "UNPAID", "RESERVED"].includes(String(customer.paymentStatus).toUpperCase())) {
       res.status(400);
-      throw new Error("Customer payment is not under review");
+      throw new Error("Customer payment is not reserved or under review");
     }
 
     const now = new Date();
@@ -1286,10 +1287,15 @@ export async function confirmCustomerPayment(req, res, next) {
     customer.requiresAdminApproval = true;
     customer.isApprovedByAdmin = false;
 
-    const openInvoice = getLatestOpenInvoice(customer) || ensureCurrentInvoice(customer);
-    openInvoice.status = "PAID";
-    openInvoice.paymentMethod = customer.paymentMethod || "NONE";
-    openInvoice.paidAt = now;
+    // If customer has not paid (admin direct confirmation), do NOT generate or mark invoice as paid
+    // Instead, set subscription dates for 30 days from now, and clear any open invoice
+    customer.subscriptionStartAt = now;
+    customer.subscriptionEndAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+    // Remove any open invoice if exists (do not mark as paid)
+    if (Array.isArray(customer.invoices)) {
+      customer.invoices = customer.invoices.filter(inv => String(inv.status).toUpperCase() === "PAID");
+    }
 
     await customer.save();
 
@@ -1297,7 +1303,7 @@ export async function confirmCustomerPayment(req, res, next) {
     await customer.populate("supervisorId", "firstName lastName email role");
 
     return res.json({
-      message: "Payment confirmed. Customer is now ready for admin approval.",
+      message: "Payment confirmed by admin. 30 days subscription started. No invoice generated.",
       user: customer,
     });
   } catch (error) {

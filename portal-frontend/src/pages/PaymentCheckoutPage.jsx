@@ -118,6 +118,21 @@ export default function PaymentCheckoutPage() {
   }
 
   if (error || !member || !invoice) {
+    // If admin confirmed payment directly, show 30 days subscription, no invoice
+    if (member && member.paymentStatus === 'PAID_APPROVED' && (!invoice || !invoice.status)) {
+      const start = member.subscriptionStartAt ? new Date(member.subscriptionStartAt) : new Date();
+      const end = member.subscriptionEndAt ? new Date(member.subscriptionEndAt) : new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+      return (
+        <div className="min-h-screen bg-[#f6f7fb] flex items-center justify-center px-4">
+          <div className="w-full max-w-md rounded-xl border border-emerald-200 bg-white p-5 text-center">
+            <h2 className="text-xl font-bold text-emerald-700 mb-2">30 Days Subscription Active</h2>
+            <p className="text-sm text-slate-700 mb-2">Your subscription is active for 30 days.</p>
+            <div className="mb-2 text-xs text-slate-500">From: <b>{start.toLocaleDateString()}</b> To: <b>{end.toLocaleDateString()}</b></div>
+            <div className="mt-4 text-xs text-slate-400">No invoice is generated for admin-confirmed payment.</div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-[#f6f7fb] flex items-center justify-center px-4">
         <div className="w-full max-w-md rounded-xl border border-red-200 bg-white p-5 text-center">
@@ -164,6 +179,14 @@ export default function PaymentCheckoutPage() {
           <section className="rounded-2xl border border-slate-100 bg-[#f9fafc] p-3">
             <div className="space-y-1 text-sm">
               <div className="flex items-center justify-between">
+                <span className="text-slate-500">Invoice #</span>
+                <span className="font-semibold text-slate-800">{invoice.invoiceNumber || '-'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Plan</span>
+                <span className="font-semibold text-slate-800">{invoice.planName}</span>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-slate-500">Plan Price</span>
                 <span className="font-semibold text-slate-800">{formatCurrency(invoice.planPrice)}</span>
               </div>
@@ -176,7 +199,7 @@ export default function PaymentCheckoutPage() {
                 <span className="font-semibold text-slate-800">Total Amount</span>
                 <div className="text-right">
                   <p className="text-[34px] font-bold leading-none text-[#0b4c8c]">{formatCurrency(invoice.totalAmount)}</p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">Billed monthly</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">30 days subscription</p>
                 </div>
               </div>
             </div>
@@ -193,82 +216,55 @@ export default function PaymentCheckoutPage() {
 
           <section>
             <h2 className="mb-2 text-sm font-semibold text-slate-800">Payment Method</h2>
-            <div className="mb-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("CREDIT_CARD")}
-                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                  paymentMethod === "CREDIT_CARD"
-                    ? "border-[#0b4c8c] bg-[#0b4c8c]/10 text-[#0b4c8c]"
-                    : "border-slate-200 bg-white text-slate-600"
-                }`}
-              >
-                Credit Card
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("BANK_TRANSFER")}
-                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                  paymentMethod === "BANK_TRANSFER"
-                    ? "border-[#0b4c8c] bg-[#0b4c8c]/10 text-[#0b4c8c]"
-                    : "border-slate-200 bg-white text-slate-600"
-                }`}
-              >
-                Bank Transfer
-              </button>
+            <div className="mb-3">
+              <span className="rounded-xl border border-[#0b4c8c] bg-[#0b4c8c]/10 text-[#0b4c8c] px-3 py-2 text-xs font-semibold">Credit/Debit Card</span>
             </div>
-
-            {paymentMethod === "CREDIT_CARD" ? (
-              <>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Enter Card Details</h3>
-                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
-                  <span className="rounded bg-slate-100 px-2 py-1">VISA</span>
-                  <span className="rounded bg-slate-100 px-2 py-1">MASTERCARD</span>
-                  <span className="rounded bg-slate-100 px-2 py-1">AMEX</span>
-                  <span className="rounded bg-slate-100 px-2 py-1">DISCOVER</span>
-                </div>
-                <select
-                  value={cardType}
-                  onChange={(event) => setCardType(event.target.value)}
-                  className="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none"
-                >
-                  <option value="CREDIT">Credit Card</option>
-                  <option value="DEBIT">Debit Card</option>
-                </select>
-                <input
-                  value={cardholderName}
-                  onChange={(event) => setCardholderName(event.target.value)}
-                  className="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none"
-                  placeholder="Cardholder's Name"
-                />
-                <div className="rounded-2xl border border-slate-300 bg-white p-2">
+            <div>
+              <input
+                value={cardholderName}
+                onChange={(event) => setCardholderName(event.target.value)}
+                className="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none"
+                placeholder="Cardholder's Name"
+              />
+              <div className="rounded-2xl border border-slate-300 bg-white p-2">
+                <div className="flex items-center gap-2">
                   <input
                     value={cardNumber}
-                    onChange={(event) => setCardNumber(event.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
+                    onChange={(event) => setCardNumber(event.target.value.replace(/[^0-9]/g, '').replace(/(.{4})/g, '$1 ').trim())}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none tracking-widest"
                     placeholder="Card number"
+                    maxLength={19}
                   />
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <input
-                      value={cardExpiry}
-                      onChange={(event) => setCardExpiry(event.target.value)}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
-                      placeholder="MM/YY"
-                    />
-                    <input
-                      value={cardCvv}
-                      onChange={(event) => setCardCvv(event.target.value)}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
-                      placeholder="CVV"
-                    />
-                  </div>
+                  {/* Card brand color box */}
+                  {cardNumber.replace(/\D/g, '').length >= 4 && (
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-lg min-w-[60px] text-white text-center ${(() => {
+                      const brand = deriveCardBrand(cardNumber);
+                      if (brand === 'VISA') return 'bg-blue-600';
+                      if (brand === 'MASTERCARD') return 'bg-red-600';
+                      if (brand === 'AMEX') return 'bg-green-600';
+                      if (brand === 'DISCOVER') return 'bg-yellow-600';
+                      return 'bg-slate-400';
+                    })()}`}>{deriveCardBrand(cardNumber) || 'CARD'}</span>
+                  )}
                 </div>
-              </>
-            ) : (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                Bank transfer selected. After clicking Pay, your payment moves to under review.
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <input
+                    value={cardExpiry}
+                    onChange={(event) => setCardExpiry(event.target.value)}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
+                    placeholder="MM/YY"
+                    maxLength={5}
+                  />
+                  <input
+                    value={cardCvv}
+                    onChange={(event) => setCardCvv(event.target.value.replace(/[^0-9]/g, ''))}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
+                    placeholder="CVV"
+                    maxLength={4}
+                  />
+                </div>
               </div>
-            )}
+            </div>
           </section>
 
           <button

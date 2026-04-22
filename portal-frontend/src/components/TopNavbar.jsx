@@ -5,6 +5,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 export default function TopNavbar() {
+  const pennsylvaniaTimeZone = "America/New_York";
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -17,6 +18,7 @@ export default function TopNavbar() {
     minute: "2-digit",
     second: "2-digit",
     hour12: true,
+    timeZone: pennsylvaniaTimeZone,
   });
 
   return (
@@ -39,6 +41,7 @@ export default function TopNavbar() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-100">Live Time</p>
                 <p className="mt-0.5 text-xl font-semibold leading-none">{timeString}</p>
+                <p className="mt-1 text-[11px] font-medium text-blue-100/90">Pennsylvania, USA</p>
               </div>
             </div>
           </div>
