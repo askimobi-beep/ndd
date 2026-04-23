@@ -85,7 +85,7 @@ export default function TicketBoardPage() {
     "Self Pay",
     "Closed",
     "Cancelled",
-    "Next 15 Days",
+    "Next 7 Days",
     "Custom Range",
   ];
 
@@ -169,8 +169,8 @@ export default function TicketBoardPage() {
       (ticket.customerEmail?.toLowerCase().includes(searchTerm) || false);
 
     let matchesFilter = true;
-    if (selectedFilter === "Next 15 Days") {
-      matchesFilter = isCourtDateInNextDays(ticket.courtDate, 15);
+    if (selectedFilter === "Next 7 Days") {
+      matchesFilter = isCourtDateInNextDays(ticket.courtDate, 7);
     } else if (selectedFilter === "Custom Range") {
       if (!customRangeFrom || !customRangeTo) {
         matchesFilter = true;
@@ -207,7 +207,7 @@ export default function TicketBoardPage() {
       "Self Pay": 0,
       Closed: 0,
       Cancelled: 0,
-      "Next 15 Days": 0,
+      "Next 7 Days": 0,
       "Custom Range": 0,
     };
 
@@ -217,8 +217,8 @@ export default function TicketBoardPage() {
         counts[normalizedStatus] += 1;
       }
 
-      if (isCourtDateInNextDays(ticket.courtDate, 15)) {
-        counts["Next 15 Days"] += 1;
+      if (isCourtDateInNextDays(ticket.courtDate, 7)) {
+        counts["Next 7 Days"] += 1;
       }
 
       if (customRangeFrom && customRangeTo) {

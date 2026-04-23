@@ -91,6 +91,8 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
   const [dateFilter, setDateFilter] = useState("ALL");
   const [planFilter, setPlanFilter] = useState("ALL");
   const [cancelledPlanFilter, setCancelledPlanFilter] = useState("ALL");
+  const [courtDateFilter, setCourtDateFilter] = useState(false);
+  const [allTickets, setAllTickets] = useState([]);
   const [formData, setFormData] = useState({
     office: "Lahore Office (LHR)",
     firstName: "",
@@ -384,9 +386,45 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
     }
   }, [canViewMembers]);
 
+  const loadAllTickets = useCallback(async () => {
+    if (!canViewAllActionButtons) {
+      return;
+    }
+    try {
+      const data = await apiRequest("/api/tickets", { method: "GET" });
+      setAllTickets(Array.isArray(data) ? data : data.tickets || []);
+    } catch {
+      setAllTickets([]);
+    }
+  }, [canViewAllActionButtons]);
+
+  const isCourtDateInNextDays = (value, days) => {
+    if (!value) return false;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return false;
+    const now = Date.now();
+    const diff = date.getTime() - now;
+    return diff >= 0 && diff <= days * 24 * 60 * 60 * 1000;
+  };
+
+  const memberIdsWithUpcomingCourtDates = useMemo(() => {
+    if (!courtDateFilter) return null;
+    const ids = new Set();
+    allTickets.forEach((ticket) => {
+      if (isCourtDateInNextDays(ticket.courtDate, 7)) {
+        const memberId = ticket.memberId && typeof ticket.memberId === "object"
+          ? String(ticket.memberId._id || ticket.memberId.id || "")
+          : String(ticket.memberId || "");
+        if (memberId) ids.add(memberId);
+      }
+    });
+    return ids;
+  }, [courtDateFilter, allTickets]);
+
   useEffect(() => {
     loadMembers();
-  }, [loadMembers]);
+    loadAllTickets();
+  }, [loadMembers, loadAllTickets]);
 
   useEffect(() => {
     setQuickFilter(initialQuickFilter === "CANCELLED" ? "CANCELLED" : "ALL");
@@ -447,6 +485,10 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
         }
       }
 
+      if (memberIdsWithUpcomingCourtDates !== null && !memberIdsWithUpcomingCourtDates.has(String(record._id || ""))) {
+        return false;
+      }
+
       if (!query) {
         return true;
       }
@@ -458,7 +500,7 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
         String(record.phone || "").toLowerCase().includes(query)
       );
     });
-  }, [records, search, quickFilter, dateFilter, planFilter, cancelledPlanFilter]);
+  }, [records, search, quickFilter, dateFilter, planFilter, cancelledPlanFilter, memberIdsWithUpcomingCourtDates]);
 
   const memberIdByUserId = useMemo(() => {
     const sorted = [...records].sort((a, b) => {
@@ -1197,6 +1239,21 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                       }`}
                     >
                       Individual ({individualCount})
+                    </button>
+                  </div>
+                  )}
+                  {canViewAllActionButtons && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCourtDateFilter((prev) => !prev)}
+                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                        courtDateFilter
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                      }`}
+                    >
+                      Next 7 Days Court Dates
                     </button>
                   </div>
                   )}
