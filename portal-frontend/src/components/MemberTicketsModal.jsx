@@ -56,7 +56,7 @@ function formatDate(value) {
 }
 
 function getPreviewFile(ticket) {
-  const candidates = [ticket?.paymentSlipFile, ticket?.caseResultFile, ...(ticket?.ticketDocuments || [])].filter(Boolean);
+  const candidates = [ticket?.caseResultFile, ...(ticket?.ticketDocuments || [])].filter(Boolean);
   return candidates.find((file) => {
     const mimeType = String(file?.mimeType || "").toLowerCase();
     const url = String(file?.url || "");
@@ -287,14 +287,10 @@ export default function MemberTicketsModal({
                     <PhotoIcon className="h-5 w-5 text-blue-600" />
                     Images & Files
                     {(() => {
-                      const files = [
-                        getPreviewFile(viewingTicket),
-                        viewingTicket?.caseResultFile,
-                        ...(viewingTicket?.ticketDocuments || [])
-                      ].filter(Boolean);
-                      return files.length > 0 ? (
+                      const previewFile = getPreviewFile(viewingTicket);
+                      return previewFile ? (
                         <span className="ml-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                          {files.length} file{files.length !== 1 ? 's' : ''}
+                          1 file
                         </span>
                       ) : null;
                     })()}
@@ -377,7 +373,7 @@ export default function MemberTicketsModal({
                       }}
                       className="w-full flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:bg-slate-100"
                     >
-                      <p className="text-sm text-slate-600 flex-1">{getCustomerTicketNotes(viewingTicket)}</p>
+                      <p className="text-sm text-slate-600 flex-1 truncate">{getCustomerTicketNotes(viewingTicket)}</p>
                       <span className="flex-shrink-0 ml-2">
                         <DocumentTextIcon className="h-4 w-4 text-slate-400" />
                       </span>
@@ -402,6 +398,26 @@ export default function MemberTicketsModal({
                     </button>
                   </div>
 
+                  {/* Payment Slip Image */}
+                  {viewingTicket?.paymentSlipFile?.url && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => window.open(getFileUrl(viewingTicket.paymentSlipFile.url), "_blank")}
+                        className="group relative w-full overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-primary"
+                      >
+                        <img
+                          src={getFileUrl(viewingTicket.paymentSlipFile.url)}
+                          alt={viewingTicket.paymentSlipFile.originalName || "Payment slip"}
+                          className="w-full object-cover transition group-hover:opacity-75"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-900/0 transition group-hover:bg-slate-900/50 group-hover:opacity-100">
+                          <span className="text-white text-xs font-semibold opacity-0 group-hover:opacity-100">View</span>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Case Documents */}
                   <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
                     <h4 className="flex items-center gap-2 text-base font-bold text-orange-900 mb-4">
@@ -409,49 +425,32 @@ export default function MemberTicketsModal({
                       Case Documents
                     </h4>
                     {(() => {
-                      const caseResultFile = viewingTicket?.caseResultFile?.url ? viewingTicket.caseResultFile : null;
-                      const documents = Array.isArray(viewingTicket?.ticketDocuments) ? viewingTicket.ticketDocuments : [];
-                      
-                      if (!caseResultFile && documents.length === 0) {
+                      const paymentSlipFile = viewingTicket?.paymentSlipFile?.url ? viewingTicket.paymentSlipFile : null;
+                      const allFiles = [paymentSlipFile].filter(Boolean);
+
+                      if (allFiles.length === 0) {
                         return (
                           <div className="rounded-lg border border-dashed border-orange-200 bg-white p-4 text-center">
-                              <p className="text-xs text-slate-600">N/A</p>
-                              <p className="text-xs text-slate-500">Upload a PDF file</p>
+                            <p className="text-xs text-slate-600">N/A</p>
+                            <p className="text-xs text-slate-500">No documents uploaded</p>
                           </div>
                         );
                       }
 
                       return (
                         <div className="space-y-2">
-                          {caseResultFile && (
-                            <button
-                              type="button"
-                              onClick={() => window.open(getFileUrl(caseResultFile.url), "_blank")}
-                              className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-primary hover:bg-slate-50"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <DocumentTextIcon className="h-4 w-4 text-slate-400" />
-                                  <div className="text-xs">
-                                    <p className="font-medium text-slate-700">{caseResultFile.originalName || "Case Result"}</p>
-                                  </div>
-                                </div>
-                                <span className="text-xs font-semibold text-primary">View</span>
-                              </div>
-                            </button>
-                          )}
-                          {documents.map((doc, idx) => (
+                          {allFiles.map((file, idx) => (
                             <button
                               key={idx}
                               type="button"
-                              onClick={() => window.open(getFileUrl(doc.url), "_blank")}
+                              onClick={() => window.open(getFileUrl(file.url), "_blank")}
                               className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-primary hover:bg-slate-50"
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <DocumentTextIcon className="h-4 w-4 text-slate-400" />
                                   <div className="text-xs">
-                                    <p className="font-medium text-slate-700">{doc.originalName || `Document ${idx + 1}`}</p>
+                                    <p className="font-medium text-slate-700">{file.originalName || `Document ${idx + 1}`}</p>
                                   </div>
                                 </div>
                                 <span className="text-xs font-semibold text-primary">View</span>

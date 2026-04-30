@@ -1041,10 +1041,6 @@ export default function TicketBoardPage() {
                           <p className="text-[11px] uppercase text-slate-500">Assigned Lawyer</p>
                           <p className="font-semibold text-teal-700">{assignedLawyerName}</p>
                         </div>
-                        <div>
-                          <p className="text-[11px] uppercase text-slate-500">Customer Notes</p>
-                          <p className="line-clamp-3 text-sm text-slate-600">{ticket.customerNotes || "No customer notes added"}</p>
-                        </div>
                         <button
                           onClick={() => handleEditTicket(ticket)}
                           className="w-full rounded-xl border border-dashed border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary"
