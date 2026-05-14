@@ -8,6 +8,7 @@ import {
   PhotoIcon,
   DocumentTextIcon,
 } from "@heroicons/react/24/outline";
+import { API_BASE_URL } from "../utils/api";
 
 function getCreatedByName(ticket) {
   return `${ticket?.createdBy?.firstName || ""} ${ticket?.createdBy?.lastName || ""}`.trim() || "Creator";
@@ -34,8 +35,7 @@ function getFileUrl(filePath) {
     return filePath;
   }
 
-  const baseURL = window.location.origin;
-  return `${baseURL}${String(filePath).startsWith("/") ? filePath : `/${filePath}`}`;
+  return `${API_BASE_URL}${String(filePath).startsWith("/") ? filePath : `/${filePath}`}`;
 }
 
 function formatDate(value) {
@@ -287,10 +287,17 @@ export default function MemberTicketsModal({
                     <PhotoIcon className="h-5 w-5 text-blue-600" />
                     Images & Files
                     {(() => {
-                      const previewFile = getPreviewFile(viewingTicket);
-                      return previewFile ? (
+                      const fileCount = [
+                        viewingTicket?.caseResultFile?.url ? 1 : 0,
+                        viewingTicket?.paymentSlipFile?.url ? 1 : 0,
+                        Array.isArray(viewingTicket?.ticketDocuments)
+                          ? viewingTicket.ticketDocuments.filter((doc) => doc?.url).length
+                          : 0,
+                      ].reduce((sum, value) => sum + value, 0);
+
+                      return fileCount > 0 ? (
                         <span className="ml-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                          1 file
+                          {fileCount} {fileCount === 1 ? "file" : "files"}
                         </span>
                       ) : null;
                     })()}
@@ -426,7 +433,11 @@ export default function MemberTicketsModal({
                     </h4>
                     {(() => {
                       const paymentSlipFile = viewingTicket?.paymentSlipFile?.url ? viewingTicket.paymentSlipFile : null;
-                      const allFiles = [paymentSlipFile].filter(Boolean);
+                      const caseResultFile = viewingTicket?.caseResultFile?.url ? viewingTicket.caseResultFile : null;
+                      const ticketDocs = Array.isArray(viewingTicket?.ticketDocuments)
+                        ? viewingTicket.ticketDocuments.filter((doc) => doc?.url)
+                        : [];
+                      const allFiles = [paymentSlipFile, caseResultFile, ...ticketDocs].filter(Boolean);
 
                       if (allFiles.length === 0) {
                         return (

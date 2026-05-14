@@ -648,10 +648,6 @@ export async function updateUser(req, res, next) {
       return res.status(403).json({ message: "Forbidden: insufficient permissions" });
     }
 
-    if (normalizeRole(req.user?.role) === "ADMIN" && ["AGENT", "CUSTOMER"].includes(normalizeRole(user.role))) {
-      return res.status(403).json({ message: "Admin can only approve or block agents and customers" });
-    }
-
     if (typeof firstName !== "undefined") {
       user.firstName = String(firstName).trim();
     }
