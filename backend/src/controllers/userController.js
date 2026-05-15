@@ -715,6 +715,45 @@ export async function updateUser(req, res, next) {
   }
 }
 
+export async function changeCustomerPlan(req, res, next) {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    if (normalizeRole(user.role) !== "CUSTOMER") {
+      return res.status(400).json({ message: "Only customer records can change plan" });
+    }
+
+    ensureCanViewRole(req, user.role);
+
+    if (!canAccessUserRecord(req, user, { forWrite: true })) {
+      return res.status(403).json({ message: "Forbidden: insufficient permissions" });
+    }
+
+    if (normalizeCustomerPlan(user.customerPlan) !== "INDIVIDUAL") {
+      return res.status(400).json({ message: "Only individual plan customers can be changed to fleet" });
+    }
+
+    user.customerPlan = "FLEET";
+    await user.save();
+
+    return res.json({
+      message: "Customer plan changed to fleet successfully",
+      user,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+
+    return next(error);
+  }
+}
+
 export async function updateUserStatus(req, res, next) {
   try {
     const { isActive } = req.body;

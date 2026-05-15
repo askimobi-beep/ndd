@@ -23,6 +23,7 @@ import {
   sendCustomerPaymentInvoiceEmail,
   updateUserApproval,
   updateUser,
+  changeCustomerPlan,
   updateUserStatus,
   searchUserByPhone,
 } from "../controllers/userController.js";
@@ -48,6 +49,7 @@ router.post("/customers/fleet", authorizeRoles("AGENT"), createFleetCustomers);
 router.post("/:id/claim", authorizeRoles("AGENT"), claimCustomer);
 router.patch("/:id/assign-agent", authorizeRoles("ADMIN"), assignAgentToCustomer);
 router.patch("/:id/assign-supervisor", authorizeRoles("ADMIN"), assignSupervisorToAgent);
+router.patch("/:id/change-plan", authorizeRoles("ADMIN"), changeCustomerPlan);
 router.get("/:id/payment-link", authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), generateCustomerPaymentLink);
 router.post("/:id/payment-link/email", authorizeRoles("ADMIN", "SUPERVISOR", "AGENT"), sendCustomerPaymentInvoiceEmail);
 router

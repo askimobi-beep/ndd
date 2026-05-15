@@ -86,6 +86,9 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [isAssignAgentsLoading, setIsAssignAgentsLoading] = useState(false);
   const [isAssigningAgent, setIsAssigningAgent] = useState(false);
+  const [showChangePlanModal, setShowChangePlanModal] = useState(false);
+  const [changingPlanCustomer, setChangingPlanCustomer] = useState(null);
+  const [isChangingPlan, setIsChangingPlan] = useState(false);
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState(initialQuickFilter === "CANCELLED" ? "CANCELLED" : "ALL");
   const [dateFilter, setDateFilter] = useState("ALL");
@@ -933,6 +936,26 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
     setIsAssigningAgent(false);
   };
 
+  const openChangePlanModal = (record) => {
+    if (!isAdmin) {
+      return;
+    }
+
+    const normalizedPlan = String(record?.customerPlan || "INDIVIDUAL").trim().toUpperCase();
+    if (normalizedPlan !== "INDIVIDUAL") {
+      return;
+    }
+
+    setChangingPlanCustomer(record);
+    setShowChangePlanModal(true);
+  };
+
+  const closeChangePlanModal = () => {
+    setShowChangePlanModal(false);
+    setChangingPlanCustomer(null);
+    setIsChangingPlan(false);
+  };
+
   const filteredAssignableAgents = useMemo(() => {
     const query = String(assignAgentSearch || "").trim().toLowerCase();
     if (!query) {
@@ -976,6 +999,30 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
       setNotification({ text: error.message || "Unable to assign agent", type: "error" });
     } finally {
       setIsAssigningAgent(false);
+    }
+  };
+
+  const handleChangePlanConfirm = async () => {
+    if (!changingPlanCustomer?._id) {
+      return;
+    }
+
+    try {
+      setIsChangingPlan(true);
+      const data = await apiRequest(`/api/users/${changingPlanCustomer._id}/change-plan`, {
+        method: "PATCH",
+      });
+
+      if (data.user) {
+        setRecords((prev) => prev.map((record) => (record._id === data.user._id ? data.user : record)));
+      }
+
+      setNotification({ text: data.message || "Customer plan updated successfully", type: "success" });
+      closeChangePlanModal();
+    } catch (error) {
+      setNotification({ text: error.message || "Unable to change customer plan", type: "error" });
+    } finally {
+      setIsChangingPlan(false);
     }
   };
 
@@ -1584,6 +1631,18 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                                   )}
                                   {canUseAdminSubscriptionActions && (
                                     <>
+                                      {String(record.customerPlan || "INDIVIDUAL").trim().toUpperCase() === "INDIVIDUAL" && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            openChangePlanModal(record);
+                                            setMoreActionsMemberId("");
+                                          }}
+                                          className="mt-1 w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                                        >
+                                          Change Plan
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
                                         onClick={() => (isSubscriptionCancelled(record) ? unCancelMemberSubscription(record) : cancelMemberSubscription(record))}
@@ -1720,6 +1779,51 @@ export default function MemberPage({ initialQuickFilter = "ALL" }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showChangePlanModal && changingPlanCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 px-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+            <div className="flex items-center justify-between">
+              <h3 className="text-2xl font-semibold text-slate-900">Change Plan</h3>
+              <button
+                type="button"
+                onClick={closeChangePlanModal}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-800">This action changes the customer from Individual to Fleet for future invoices only.</p>
+              <p className="mt-2 text-sm text-amber-700">
+                Current member: {`${changingPlanCustomer.firstName || ""} ${changingPlanCustomer.lastName || ""}`.trim() || "Unknown Member"}
+              </p>
+              <p className="mt-1 text-sm text-amber-700">
+                Next invoice will use the Fleet plan price of $44.99.
+              </p>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeChangePlanModal}
+                className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleChangePlanConfirm}
+                disabled={isChangingPlan}
+                className="rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isChangingPlan ? "Updating..." : "Change to Fleet"}
+              </button>
+            </div>
           </div>
         </div>
       )}
