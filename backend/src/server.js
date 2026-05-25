@@ -9,9 +9,11 @@ const PORT = process.env.PORT || 5000;
 async function startServer() {
   await connectDB();
 
-  app.listen(PORT, () => {
+  const HOST = process.env.HOST || "127.0.0.1";
+
+  app.listen(PORT, HOST, () => {
     // eslint-disable-next-line no-console
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on ${HOST}:${PORT}`);
   });
 }
 

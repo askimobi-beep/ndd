@@ -2,7 +2,6 @@ import { BrowserRouter as Router, Navigate, Routes, Route } from 'react-router-d
 import Sidebar from './components/Sidebar';
 import ProtectedRoute from './components/ProtectedRoute';
 import HomeLogin from './pages/HomeLogin';
-import SignUpPage from './pages/SignUp';
 import AccountPage from './pages/AccountPage';
 import TicketCheckerPage from './pages/TicketCheckerPage';
 import LawyerPage from './pages/LawyerPage';
@@ -35,7 +34,6 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<HomeLogin />} />
-        <Route path="/signup" element={<SignUpPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/payment/:token" element={<PaymentCheckoutPage />} />

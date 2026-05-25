@@ -7,51 +7,6 @@ function normalizeEmail(email = "") {
   return String(email).trim().toLowerCase();
 }
 
-export async function register(req, res, next) {
-  try {
-    const {
-      firstName,
-      lastName,
-      email,
-      password,
-      role = "SUPERVISOR",
-      phone = "",
-      office = "Lahore Office (LHR)",
-    } = req.body;
-
-    if (!firstName || !lastName || !email || !password) {
-      res.status(400);
-      throw new Error("firstName, lastName, email, and password are required");
-    }
-
-    const normalizedEmail = normalizeEmail(email);
-    const existingUser = await User.findOne({ email: normalizedEmail });
-
-    if (existingUser) {
-      res.status(409);
-      throw new Error("Email already registered");
-    }
-
-    const user = await User.create({
-      firstName,
-      lastName,
-      email: normalizedEmail,
-      password,
-      role,
-      phone,
-      office,
-    });
-
-    return res.status(201).json({
-      message: "User registered successfully",
-      user,
-      token: generateToken(user),
-    });
-  } catch (error) {
-    return next(error);
-  }
-}
-
 export async function login(req, res, next) {
   try {
     const { email, password } = req.body;
@@ -232,24 +187,10 @@ export async function forgotPassword(req, res, next) {
         html: `<p>You requested a password reset.</p><p><a href="${resetUrl}">Reset your password</a></p><p>This link expires in 15 minutes.</p>`,
       });
 
-      return res.json({ message: "Password reset email sent" });
+      return res.json({ message: "If this email exists, a reset link has been sent" });
     } catch (mailError) {
-      // Keep forgot-password endpoint resilient even when SMTP provider is unavailable.
       console.error("Forgot password email delivery failed:", mailError?.message || mailError);
-
-      const response = {
-        message: "Password reset request accepted. Email delivery is temporarily unavailable.",
-      };
-
-      const allowResetLinkFallback =
-        process.env.NODE_ENV !== "production" ||
-        String(process.env.ALLOW_RESET_LINK_FALLBACK || "").toLowerCase() === "true";
-
-      if (allowResetLinkFallback) {
-        response.devResetUrl = resetUrl;
-      }
-
-      return res.status(202).json(response);
+      return res.json({ message: "If this email exists, a reset link has been sent" });
     }
   } catch (error) {
     return next(error);
