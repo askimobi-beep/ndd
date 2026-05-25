@@ -297,7 +297,9 @@ export default function MemberProfilePage() {
                     <p className="text-[9px] font-bold uppercase tracking-widest text-blue-200">
                       24/7 Support
                     </p>
-                    <p className="mt-0.5 text-sm font-semibold">(888) 391-8415</p>
+                    <p className="mt-0.5 text-sm font-semibold">
+                      <a href="tel:+18883150322" className="hover:underline">+1 888-315-0322</a>
+                    </p>
                     <p className="text-[9px] text-blue-300">Always available for assistance</p>
                   </div>
                 </div>
