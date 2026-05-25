@@ -98,10 +98,10 @@ export default function SignUpPage() {
             <div className="rounded-xl border border-white/15 bg-white/10 p-3 text-xs text-blue-100 backdrop-blur-sm">
               <p className="font-semibold text-white">Support Contacts</p>
               <p className="mt-1.5">
-                Support: <span className="font-medium text-white">+1 844-222-7764</span>
+                Phone: <a href="tel:+18883150322" className="font-medium text-white hover:underline">+1 888-315-0322</a>
               </p>
               <p>
-                Emergency: <span className="font-medium text-white">+1 703-419-5277</span>
+                Email: <a href="mailto:contact@ndd-llc.com" className="font-medium text-white hover:underline">contact@ndd-llc.com</a>
               </p>
             </div>
           </div>

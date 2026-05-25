@@ -110,10 +110,10 @@ export default function HomeLogin() {
             <div className="w-full rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
               <p className="text-base font-semibold text-white">Need Help?</p>
               <p className="mt-2 text-sm text-blue-50">
-                Support: <span className="font-semibold text-white">+1 844-222-7764</span>
+                Phone: <a href="tel:+18883150322" className="font-semibold text-white hover:underline">+1 888-315-0322</a>
               </p>
               <p className="mt-1 text-sm text-blue-50">
-                Emergency: <span className="font-semibold text-white">+1 703-419-5277</span>
+                Email: <a href="mailto:contact@ndd-llc.com" className="font-semibold text-white hover:underline">contact@ndd-llc.com</a>
               </p>
             </div>
           </div>
