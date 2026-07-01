@@ -1,288 +1,454 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { LockClosedIcon } from "@heroicons/react/24/outline";
+import { LockClosedIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 import { apiRequest } from "../utils/api";
 
-function formatCurrency(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
+// ─── Fixed pricing constants (mirrors server-side integer cents) ───────────────
+const PLAN_NAME = "Individual Protection Plan";
+const BASE_PRICE_DISPLAY = "$54.99";
+const PROCESSING_FEE_DISPLAY = "$1.11";
+const TOTAL_DISPLAY = "$56.10";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function deriveCardBrand(value) {
+  const d = String(value || "").replace(/\D/g, "");
+  if (/^4/.test(d)) return "VISA";
+  if (/^(5[1-5]|2[2-7])/.test(d)) return "MASTERCARD";
+  if (/^3[47]/.test(d)) return "AMEX";
+  if (/^(6011|65|64[4-9])/.test(d)) return "DISCOVER";
+  return "";
 }
 
+function formatCardNumber(raw) {
+  return raw.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
+}
+
+function formatExpiry(raw) {
+  const digits = raw.replace(/\D/g, "").slice(0, 4);
+  if (digits.length >= 3) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return digits;
+}
+
+const BRAND_COLORS = {
+  VISA: "bg-blue-600",
+  MASTERCARD: "bg-red-600",
+  AMEX: "bg-emerald-600",
+  DISCOVER: "bg-amber-500",
+};
+
+function CardBrandBadge({ brand }) {
+  if (!brand) return null;
+  return (
+    <span
+      className={`${BRAND_COLORS[brand] ?? "bg-slate-400"} shrink-0 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white`}
+    >
+      {brand}
+    </span>
+  );
+}
+
+/**
+ * Tokenize card details using the CardFlight client-side SDK.
+ * Raw card data (PAN / CVV) never leaves the browser — only the resulting
+ * single-use token string is forwarded to our API.
+ *
+ * @param {{ number: string, expMonth: string, expYear: string, cvv: string, name: string }} cardData
+ * @returns {Promise<string>} Single-use CardFlight token
+ */
+async function tokenizeWithCardFlight(cardData) {
+  if (!window.CardFlight) {
+    throw new Error(
+      "The payment gateway is unavailable. Please refresh the page and try again."
+    );
+  }
+  const result = await window.CardFlight.createToken({
+    number: cardData.number,
+    exp_month: cardData.expMonth,
+    exp_year: `20${cardData.expYear}`,
+    cvc: cardData.cvv,
+    name: cardData.name,
+  });
+  if (result?.error) {
+    throw new Error(result.error.message || "Card tokenization failed. Please check your card details.");
+  }
+  if (!result?.token) {
+    throw new Error("The payment gateway did not return a valid token. Please try again.");
+  }
+  return result.token;
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function PaymentCheckoutPage() {
   const { token } = useParams();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+
+  // Page-level state
+  const [pageState, setPageState] = useState("loading"); // loading | ready | success | error | already_paid
   const [member, setMember] = useState(null);
-  const [invoice, setInvoice] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("CREDIT_CARD");
+  const [pageError, setPageError] = useState("");
+
+  // Card form state
   const [cardholderName, setCardholderName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvv, setCardCvv] = useState("");
-  const [cardType, setCardType] = useState("CREDIT");
 
-  const deriveCardBrand = (value) => {
-    const digits = String(value || "").replace(/\D/g, "");
-    if (/^4/.test(digits)) return "VISA";
-    if (/^(5[1-5]|2[2-7])/.test(digits)) return "MASTERCARD";
-    if (/^3[47]/.test(digits)) return "AMEX";
-    if (/^(6011|65|64[4-9])/.test(digits)) return "DISCOVER";
-    return "";
-  };
+  // Submission state
+  const [formError, setFormError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
+  const cardBrand = deriveCardBrand(cardNumber);
+
+  // ── Load CardFlight SDK + customer data ──────────────────────────────────────
   useEffect(() => {
-    async function loadCheckout() {
+    // Dynamically inject the CardFlight JS SDK so it only loads on this page
+    if (!window.CardFlight) {
+      const script = document.createElement("script");
+      script.src =
+        process.env.REACT_APP_CARDFLIGHT_SDK_URL ||
+        "https://cdn.cardflight.com/cardflight.min.js";
+      script.async = true;
+      script.onload = () => {
+        const publishableKey = process.env.REACT_APP_CARDFLIGHT_PUBLISHABLE_KEY;
+        if (window.CardFlight && publishableKey) {
+          window.CardFlight.init(publishableKey);
+        }
+      };
+      document.head.appendChild(script);
+    }
+
+    async function loadCustomer() {
       try {
-        setIsLoading(true);
-        setError("");
         const data = await apiRequest(`/api/users/payment-checkout/${token}`);
-        setMember(data.customer || null);
-        setInvoice(data.invoice || null);
-      } catch (loadError) {
-        setError(loadError.message || "Unable to load payment details");
-      } finally {
-        setIsLoading(false);
+        const customer = data.customer || null;
+        setMember(customer);
+
+        if (customer?.paymentStatus === "PAID_APPROVED") {
+          setPageState("already_paid");
+        } else {
+          setPageState("ready");
+        }
+      } catch (err) {
+        setPageError(err.message || "Unable to load payment details.");
+        setPageState("error");
       }
     }
 
-    loadCheckout();
+    loadCustomer();
   }, [token]);
 
-  const fullName = useMemo(() => {
-    if (!member) {
-      return "";
+  // ── Form validation ──────────────────────────────────────────────────────────
+  function validate() {
+    if (!cardholderName.trim()) return "Cardholder name is required.";
+
+    const digits = cardNumber.replace(/\D/g, "");
+    if (digits.length < 13 || digits.length > 19)
+      return "Please enter a valid card number.";
+
+    const match = cardExpiry.match(/^(\d{2})\/(\d{2})$/);
+    if (!match) return "Enter expiry in MM/YY format.";
+
+    const month = parseInt(match[1], 10);
+    if (month < 1 || month > 12) return "Invalid expiry month.";
+
+    const expYear = 2000 + parseInt(match[2], 10);
+    const lastDayOfExpMonth = new Date(expYear, month, 0);
+    if (lastDayOfExpMonth < new Date()) return "Card has expired.";
+
+    if (!cardCvv || cardCvv.length < 3) return "Please enter a valid CVV.";
+
+    return null;
+  }
+
+  // ── Submit handler ───────────────────────────────────────────────────────────
+  async function handleSubmit() {
+    setFormError("");
+
+    const validationError = validate();
+    if (validationError) {
+      setFormError(validationError);
+      return;
     }
-    return `${member.firstName || ""} ${member.lastName || ""}`.trim();
-  }, [member]);
 
-  const handleSubmitPayment = async () => {
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      setError("");
+      const [expMonth, expYear] = cardExpiry.split("/");
 
-      if (paymentMethod === "CREDIT_CARD") {
-        const cardDigits = cardNumber.replace(/\D/g, "");
-        if (!cardholderName.trim() || cardDigits.length < 12 || !cardExpiry.trim() || !cardCvv.trim()) {
-          setError("Please enter complete card details before submitting payment.");
-          setIsSubmitting(false);
-          return;
-        }
-      }
-
-      const cardBrand = deriveCardBrand(cardNumber);
-      const cardLast4 = cardNumber.replace(/\D/g, "").slice(-4);
-
-      const data = await apiRequest(`/api/users/payment-checkout/${token}/submit`, {
-        method: "POST",
-        body: JSON.stringify({
-          paymentMethod,
-          paymentCard:
-            paymentMethod === "CREDIT_CARD"
-              ? {
-                  brand: cardBrand,
-                  cardType,
-                  last4: cardLast4,
-                  cardNumber,
-                }
-              : {
-                  brand: "",
-                  cardType: "",
-                  last4: "",
-                },
-        }),
+      // Step 1 — tokenize card data client-side (PAN/CVV never leave the browser)
+      const cardFlightToken = await tokenizeWithCardFlight({
+        number: cardNumber.replace(/\D/g, ""),
+        expMonth,
+        expYear,
+        cvv: cardCvv,
+        name: cardholderName.trim(),
       });
 
-      setSuccessMessage(data.message || "Payment submitted successfully");
-      setMember((prev) =>
-        prev
-          ? {
-              ...prev,
-              paymentStatus: "UNDER_REVIEW",
-            }
-          : prev
-      );
-    } catch (submitError) {
-      setError(submitError.message || "Unable to submit payment");
+      // Step 2 — forward ONLY the token + checkout JWT to our backend
+      const result = await apiRequest("/api/payments/charge", {
+        method: "POST",
+        body: JSON.stringify({ checkoutToken: token, cardFlightToken }),
+      });
+
+      setSuccessMessage(result.message || "Payment processed successfully.");
+      setPageState("success");
+    } catch (err) {
+      setFormError(err.message || "Payment failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }
 
-  if (isLoading) {
+  const fullName = member
+    ? `${member.firstName || ""} ${member.lastName || ""}`.trim()
+    : "";
+
+  // ── Render states ─────────────────────────────────────────────────────────────
+  if (pageState === "loading") {
     return (
-      <div className="min-h-screen bg-[#f6f7fb] flex items-center justify-center text-slate-500 text-sm">
-        Loading checkout...
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#0b4c8c] border-t-transparent" />
+          <p className="text-sm text-slate-500">Loading secure checkout…</p>
+        </div>
       </div>
     );
   }
 
-  if (error || !member || !invoice) {
-    // If admin confirmed payment directly, show 30 days subscription, no invoice
-    if (member && member.paymentStatus === 'PAID_APPROVED' && (!invoice || !invoice.status)) {
-      const start = member.subscriptionStartAt ? new Date(member.subscriptionStartAt) : new Date();
-      const end = member.subscriptionEndAt ? new Date(member.subscriptionEndAt) : new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
-      return (
-        <div className="min-h-screen bg-[#f6f7fb] flex items-center justify-center px-4">
-          <div className="w-full max-w-md rounded-xl border border-emerald-200 bg-white p-5 text-center">
-            <h2 className="text-xl font-bold text-emerald-700 mb-2">30 Days Subscription Active</h2>
-            <p className="text-sm text-slate-700 mb-2">Your subscription is active for 30 days.</p>
-            <div className="mb-2 text-xs text-slate-500">From: <b>{start.toLocaleDateString()}</b> To: <b>{end.toLocaleDateString()}</b></div>
-            <div className="mt-4 text-xs text-slate-400">No invoice is generated for admin-confirmed payment.</div>
+  if (pageState === "error") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-red-100 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
+            <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
           </div>
-        </div>
-      );
-    }
-    return (
-      <div className="min-h-screen bg-[#f6f7fb] flex items-center justify-center px-4">
-        <div className="w-full max-w-md rounded-xl border border-red-200 bg-white p-5 text-center">
-          <p className="text-sm font-semibold text-red-700">{error || "Invalid payment link"}</p>
+          <h2 className="mb-2 text-base font-semibold text-slate-800">Invalid Payment Link</h2>
+          <p className="text-sm text-slate-500">{pageError || "This payment link is invalid or has expired."}</p>
         </div>
       </div>
     );
   }
 
+  if (pageState === "already_paid") {
+    const end = member?.subscriptionEndAt ? new Date(member.subscriptionEndAt) : null;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-emerald-100 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50">
+            <ShieldCheckIcon className="h-6 w-6 text-emerald-500" />
+          </div>
+          <h2 className="mb-1 text-base font-semibold text-slate-800">Subscription Active</h2>
+          {end && (
+            <p className="mt-1 text-sm text-slate-500">
+              Valid until{" "}
+              <strong>{end.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</strong>
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (pageState === "success") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-emerald-100 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50">
+            <svg className="h-6 w-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="mb-2 text-lg font-bold text-slate-800">Payment Successful</h2>
+          <p className="mb-4 text-sm text-slate-500">{successMessage}</p>
+          <p className="text-xs text-slate-400">
+            Your Individual Protection Plan is now active for 30 days.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Checkout form (ready state) ───────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#f6f7fb]">
-      <div className="mx-auto max-w-xl px-4 py-4">
-        <header className="flex items-center justify-between py-1">
+    <div className="min-h-screen bg-slate-50 px-4 py-10">
+      <div className="mx-auto w-full max-w-[460px]">
+
+        {/* ── Header ─────────────────────────────────────────────────────────── */}
+        <div className="mb-8 flex items-center justify-between">
           <img
             src="/ndd%20logo%20without%20bg.webp"
-            alt="NDD"
-            className="h-12 w-auto object-contain"
+            alt="Nationwide Driver Defence"
+            className="h-10 w-auto object-contain"
           />
-          <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400">
-            <LockClosedIcon className="h-3.5 w-3.5" />
-            Secure Checkout
+          <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+            <LockClosedIcon className="h-3 w-3 text-emerald-500" />
+            <span className="text-[11px] font-medium text-slate-500">SSL Encrypted</span>
           </div>
-        </header>
+        </div>
 
-        <main className="mt-2 space-y-4 pb-8">
-          {successMessage && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-              {successMessage}
-            </div>
-          )}
+        {/* ── Main card ───────────────────────────────────────────────────────── */}
+        <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5">
 
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-              {error}
-            </div>
-          )}
+          {/* Order summary header */}
+          <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-5">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              Order Summary
+            </p>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">{PLAN_NAME}</h1>
+            {fullName && (
+              <p className="mt-0.5 text-xs text-slate-500">For {fullName}</p>
+            )}
+          </div>
 
-          <section>
-            <p className="text-[11px] text-slate-500">Order for {fullName}</p>
-            <h1 className="text-[30px] font-bold leading-tight text-slate-900">{invoice.planName || "Individual Protection Plan"}</h1>
-            <p className="mt-1 text-xs text-slate-500">Full coverage protection with 24/7 support for USA</p>
-          </section>
-
-          <section className="rounded-2xl border border-slate-100 bg-[#f9fafc] p-3">
-            <div className="space-y-1 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Invoice #</span>
-                <span className="font-semibold text-slate-800">{invoice.invoiceNumber || '-'}</span>
+          {/* Pricing breakdown */}
+          <div className="px-6 pb-5 pt-4">
+            <div className="space-y-2.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Base Price</span>
+                <span className="font-medium text-slate-800">{BASE_PRICE_DISPLAY}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Plan</span>
-                <span className="font-semibold text-slate-800">{invoice.planName}</span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-slate-500">
+                  Processing Fee{" "}
+                  <span className="text-[11px] text-slate-400">(2.02%)</span>
+                </span>
+                <span className="font-medium text-slate-800">{PROCESSING_FEE_DISPLAY}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Plan Price</span>
-                <span className="font-semibold text-slate-800">{formatCurrency(invoice.planPrice)}</span>
+              <div className="pt-2">
+                <div className="h-px bg-slate-100" />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Processing Fee</span>
-                <span className="font-semibold text-slate-800">{formatCurrency(invoice.processingFee)}</span>
-              </div>
-              <div className="my-2 h-px bg-slate-200" />
-              <div className="flex items-end justify-between">
-                <span className="font-semibold text-slate-800">Total Amount</span>
+              <div className="flex items-end justify-between pt-0.5">
+                <span className="text-sm font-semibold text-slate-700">Total Due</span>
                 <div className="text-right">
-                  <p className="text-[34px] font-bold leading-none text-[#0b4c8c]">{formatCurrency(invoice.totalAmount)}</p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">30 days subscription</p>
+                  <p className="text-[28px] font-bold leading-none tracking-tight text-[#0b4c8c]">
+                    {TOTAL_DISPLAY}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400">30-day subscription</p>
                 </div>
               </div>
             </div>
-          </section>
+          </div>
 
-          <section className="rounded-2xl border border-slate-100 bg-[#f9fafc] p-3">
-            <h2 className="mb-2 text-sm font-semibold text-slate-800">Member Information</h2>
-            <div className="space-y-1 text-sm">
-              <div className="flex items-center justify-between"><span className="text-slate-500">Name</span><span className="font-semibold text-slate-800">{fullName}</span></div>
-              <div className="flex items-center justify-between"><span className="text-slate-500">Email</span><span className="font-semibold text-slate-800">{member.email || "-"}</span></div>
-              <div className="flex items-center justify-between"><span className="text-slate-500">Phone</span><span className="font-semibold text-slate-800">{member.phone || "-"}</span></div>
-            </div>
-          </section>
+          {/* Divider */}
+          <div className="h-px bg-slate-100" />
 
-          <section>
-            <h2 className="mb-2 text-sm font-semibold text-slate-800">Payment Method</h2>
-            <div className="mb-3">
-              <span className="rounded-xl border border-[#0b4c8c] bg-[#0b4c8c]/10 text-[#0b4c8c] px-3 py-2 text-xs font-semibold">Credit/Debit Card</span>
-            </div>
-            <div>
+          {/* Payment form */}
+          <div className="px-6 pb-7 pt-6">
+            <p className="mb-5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              Card Details
+            </p>
+
+            {/* Cardholder Name */}
+            <div className="mb-4">
+              <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                Cardholder Name
+              </label>
               <input
+                type="text"
+                autoComplete="cc-name"
                 value={cardholderName}
-                onChange={(event) => setCardholderName(event.target.value)}
-                className="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none"
-                placeholder="Cardholder's Name"
+                onChange={(e) => setCardholderName(e.target.value)}
+                placeholder="Name as it appears on card"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-300 focus:border-[#0b4c8c] focus:ring-2 focus:ring-[#0b4c8c]/10"
               />
-              <div className="rounded-2xl border border-slate-300 bg-white p-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    value={cardNumber}
-                    onChange={(event) => setCardNumber(event.target.value.replace(/[^0-9]/g, '').replace(/(.{4})/g, '$1 ').trim())}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none tracking-widest"
-                    placeholder="Card number"
-                    maxLength={19}
-                  />
-                  {/* Card brand color box */}
-                  {cardNumber.replace(/\D/g, '').length >= 4 && (
-                    <span className={`text-xs font-semibold px-3 py-1 rounded-lg min-w-[60px] text-white text-center ${(() => {
-                      const brand = deriveCardBrand(cardNumber);
-                      if (brand === 'VISA') return 'bg-blue-600';
-                      if (brand === 'MASTERCARD') return 'bg-red-600';
-                      if (brand === 'AMEX') return 'bg-green-600';
-                      if (brand === 'DISCOVER') return 'bg-yellow-600';
-                      return 'bg-slate-400';
-                    })()}`}>{deriveCardBrand(cardNumber) || 'CARD'}</span>
-                  )}
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <input
-                    value={cardExpiry}
-                    onChange={(event) => setCardExpiry(event.target.value)}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
-                    placeholder="MM/YY"
-                    maxLength={5}
-                  />
-                  <input
-                    value={cardCvv}
-                    onChange={(event) => setCardCvv(event.target.value.replace(/[^0-9]/g, ''))}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none"
-                    placeholder="CVV"
-                    maxLength={4}
-                  />
-                </div>
+            </div>
+
+            {/* Card Number */}
+            <div className="mb-4">
+              <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                Card Number
+              </label>
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 transition focus-within:border-[#0b4c8c] focus-within:ring-2 focus-within:ring-[#0b4c8c]/10">
+                <input
+                  type="text"
+                  autoComplete="cc-number"
+                  inputMode="numeric"
+                  value={cardNumber}
+                  onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
+                  placeholder="1234  5678  9012  3456"
+                  maxLength={19}
+                  className="min-w-0 flex-1 bg-transparent text-sm tracking-widest text-slate-800 outline-none placeholder:tracking-normal placeholder:text-slate-300"
+                />
+                <CardBrandBadge brand={cardBrand} />
               </div>
             </div>
-          </section>
 
-          <button
-            type="button"
-            onClick={handleSubmitPayment}
-            disabled={isSubmitting || member?.paymentStatus === "UNDER_REVIEW"}
-            className="w-full rounded-xl bg-[#0b4c8c] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#094276] disabled:cursor-not-allowed disabled:opacity-65"
-          >
-            {member?.paymentStatus === "UNDER_REVIEW"
-              ? "Submitted - Under Review"
-              : isSubmitting
-                ? "Submitting..."
-                : `Pay ${formatCurrency(invoice.totalAmount)}`}
-          </button>
+            {/* Expiry + CVV */}
+            <div className="mb-5 grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Expiry Date
+                </label>
+                <input
+                  type="text"
+                  autoComplete="cc-exp"
+                  inputMode="numeric"
+                  value={cardExpiry}
+                  onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
+                  placeholder="MM/YY"
+                  maxLength={5}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-300 focus:border-[#0b4c8c] focus:ring-2 focus:ring-[#0b4c8c]/10"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  CVV / CVC
+                </label>
+                <input
+                  type="password"
+                  autoComplete="cc-csc"
+                  inputMode="numeric"
+                  value={cardCvv}
+                  onChange={(e) =>
+                    setCardCvv(e.target.value.replace(/\D/g, "").slice(0, 4))
+                  }
+                  placeholder="•••"
+                  maxLength={4}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-300 focus:border-[#0b4c8c] focus:ring-2 focus:ring-[#0b4c8c]/10"
+                />
+              </div>
+            </div>
 
-          <p className="pt-4 text-center text-[10px] text-slate-400">© 2026 NDD. All rights reserved.</p>
-        </main>
+            {/* Error notification */}
+            {formError && (
+              <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-medium leading-relaxed text-red-700">
+                {formError}
+              </div>
+            )}
+
+            {/* Pay button */}
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0b4c8c] px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0d3d73] focus:outline-none focus:ring-2 focus:ring-[#0b4c8c]/40 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <LockClosedIcon className="h-4 w-4 shrink-0" />
+              {isSubmitting ? "Processing…" : `Pay ${TOTAL_DISPLAY} Securely`}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Trust footer ────────────────────────────────────────────────────── */}
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <div className="flex items-center gap-4 text-[11px] text-slate-400">
+            <span className="flex items-center gap-1">
+              <ShieldCheckIcon className="h-3.5 w-3.5" />
+              PCI-DSS Compliant
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="flex items-center gap-1">
+              <LockClosedIcon className="h-3.5 w-3.5" />
+              256-bit TLS Encryption
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            © 2026 Nationwide Driver Defence. All rights reserved.
+          </p>
+        </div>
+
       </div>
     </div>
   );
-}
+}
